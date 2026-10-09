@@ -58,6 +58,9 @@ final class MenuBar: NSObject, NSMenuDelegate {
             timer = nil
             animation?.invalidate()
             animation = nil
+            // 出すたびに登録するので、消すときに外す。外さないと出し入れのたびに重なる
+            NotificationCenter.default.removeObserver(
+                self, name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
             if let item { NSStatusBar.system.removeStatusItem(item) }
             item = nil
         }
