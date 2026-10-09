@@ -11,3 +11,4 @@ lp/tsconfig.tsbuildinfo
 lp/public/sitemap*.xml
 lp/public/robots.txt
 node_modules/
+.vercel/
