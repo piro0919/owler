@@ -59,7 +59,7 @@ final class MenuBar: NSObject, NSMenuDelegate {
 
     private func refresh() {
         guard let button = item?.button else { return }
-        let failures = lastRuns().filter { $0.1?.state == .failed }.count
+        let failures = lastRuns().filter { [.failed, .interrupted].contains($0.1?.state) }.count
         button.image = Self.statusIcon
         button.imagePosition = .imageLeading
         button.title = failures > 0 ? " \(failures)" : ""
@@ -122,6 +122,7 @@ final class MenuBar: NSObject, NSMenuDelegate {
             case .running: .systemBlue
             case .succeeded: .systemGreen
             case .failed: .systemRed
+            case .interrupted: .systemOrange
             case nil: .tertiaryLabelColor
             }
         return NSImage(size: NSSize(width: 10, height: 10), flipped: false) { rect in

@@ -94,6 +94,54 @@ enum SelfTest {
                 "英語の時刻の説明")
         }
 
+        // 時刻×曜日が揃っていない枠は、まとめずに並べる
+        do {
+            let ja = Locale(identifier: "ja_JP")
+            func job(_ slots: [Job.Slot]) -> Job {
+                Job(id: "a", summary: "", folder: "/tmp", command: ["/bin/echo"], schedule: slots, alsoLogTo: nil)
+            }
+            check(
+                job([Job.Slot(hour: 9, minute: 0, weekday: 1), Job.Slot(hour: 17, minute: 0, weekday: 5)])
+                    .scheduleText(locale: ja) == "月 9:00, 金 17:00", "曜日ごとに時刻が違えば枠ごとに並べる")
+            check(
+                job([Job.Slot(hour: 9, minute: 0, weekday: nil), Job.Slot(hour: 18, minute: 0, weekday: 1)])
+                    .scheduleText(locale: ja) == "毎日 9:00, 月 18:00", "毎日の枠を落とさない")
+            check(
+                job([Job.Slot(hour: 9, minute: 0, weekday: 0), Job.Slot(hour: 9, minute: 0, weekday: 7)])
+                    .scheduleText(locale: ja) == "日 9:00", "0 と 7 は同じ日曜")
+        }
+
+        // 中断した回
+        do {
+            var run = RunRecord(stamp: "x", start: Date(), pid: getpid())
+            check(run.state == .running, "記録を取っているプロセスが生きていれば実行中")
+            run.pid = 999_999
+            check(run.state == .interrupted, "プロセスがいなければ中断")
+            run.exitCode = 0
+            check(run.state == .succeeded, "終わりが書かれていればその結果")
+        }
+
+        // 紐づけるのは claude -p のセッションだけ
+        do {
+            check(Sessions.isNonInteractive(head: #"{"entrypoint":"sdk-cli","type":"user"}"#), "sdk-cli は紐づける")
+            check(!Sessions.isNonInteractive(head: #"{"entrypoint":"claude-vscode"}"#), "エディタの対話は紐づけない")
+            check(!Sessions.isNonInteractive(head: #"{"entrypoint":"cli"}"#), "ターミナルの対話は紐づけない")
+        }
+
+        // コマンドの名前を絶対パスにする
+        do {
+            check(CLI.resolve("sh", environment: ["PATH": "/nowhere:/bin"]) == "/bin/sh", "PATH から探す")
+            check(CLI.resolve("no-such-command-xyz", environment: ["PATH": "/bin"]) == nil, "無ければ断る")
+            check(CLI.resolve("/bin/sh") == "/bin/sh", "絶対パスはそのまま")
+        }
+
+        // 知らないオプション
+        do {
+            let o = CLI.parse(["a", "--weekday", "1-5", "--at", "9:00"])
+            check(o?.unknown(allowed: ["at", "weekdays"]) == "weekday", "綴りを間違えたオプションを拾う")
+            check(o?.unknown(allowed: ["at", "weekday"]) == nil, "知っている名前だけなら無い")
+        }
+
         // ジョブの名前
         do {
             check(Job.isValidID("spatto-promo"), "英小文字と `-` は使える")

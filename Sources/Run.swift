@@ -8,14 +8,18 @@ struct RunRecord: Codable, Equatable, Identifiable {
     var exitCode: Int32?
     /// この実行の間に作られた Claude Code のセッション
     var session: String?
+    /// 記録を取っている `Owler run` のプロセス。終わりを書けずに止まった回を見分ける
+    var pid: Int32?
 
     var id: String { stamp }
 
-    enum State { case running, succeeded, failed }
+    /// interrupted は、終わりを書く前に `Owler run` ごと止められた回（登録し直し・ログアウト・電源断など）
+    enum State { case running, succeeded, failed, interrupted }
 
     var state: State {
-        guard let exitCode else { return .running }
-        return exitCode == 0 ? .succeeded : .failed
+        if let exitCode { return exitCode == 0 ? .succeeded : .failed }
+        guard let pid, kill(pid, 0) == 0 || errno == EPERM else { return .interrupted }
+        return .running
     }
 }
 
@@ -47,6 +51,21 @@ enum RunStore {
             .compactMap { try? decoder.decode(RunRecord.self, from: Data(contentsOf: $0)) }
     }
 
+    /// 残す回数。これより古い回は記録も出力も消す
+    static let keep = 100
+
+    static func prune(_ id: String) {
+        let fm = FileManager.default
+        let files = (try? fm.contentsOfDirectory(at: Paths.runs(id), includingPropertiesForKeys: nil)) ?? []
+        let stamps = files.filter { $0.pathExtension == "json" }
+            .map { $0.deletingPathExtension().lastPathComponent }
+            .sorted(by: >)
+        for stamp in stamps.dropFirst(keep) {
+            try? fm.removeItem(at: record(id, stamp))
+            try? fm.removeItem(at: log(id, stamp))
+        }
+    }
+
     static func save(_ record: RunRecord, for id: String) throws {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -74,7 +93,7 @@ enum Runner {
         let fm = FileManager.default
         try? fm.createDirectory(at: Paths.runs(id), withIntermediateDirectories: true)
         let start = Date()
-        var record = RunRecord(stamp: RunStore.stampFormat.string(from: start), start: start)
+        var record = RunRecord(stamp: RunStore.stampFormat.string(from: start), start: start, pid: getpid())
         try? RunStore.save(record, for: id)
 
         fm.createFile(atPath: RunStore.log(id, record.stamp).path, contents: nil)
@@ -91,6 +110,9 @@ enum Runner {
         process.executableURL = URL(fileURLWithPath: Paths.expand(executable))
         process.arguments = Array(job.command.dropFirst())
         process.currentDirectoryURL = URL(fileURLWithPath: Paths.expand(job.folder))
+        if let extra = job.environment {
+            process.environment = ProcessInfo.processInfo.environment.merging(extra) { _, new in new }
+        }
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = pipe
@@ -109,7 +131,10 @@ enum Runner {
         do {
             try process.run()
             process.waitUntilExit()
-            done.wait()
+            // 裏で起こした子が出力をつかんだまま残ると、終わりの印が来ない。少しだけ待って読むのをやめる
+            if done.wait(timeout: .now() + 2) == .timedOut {
+                pipe.fileHandleForReading.readabilityHandler = nil
+            }
             status = process.terminationStatus
         } catch {
             pipe.fileHandleForReading.readabilityHandler = nil
@@ -122,6 +147,7 @@ enum Runner {
         record.exitCode = status
         record.session = Sessions.find(folder: Paths.expand(job.folder), from: start, to: record.end!)
         try? RunStore.save(record, for: id)
+        RunStore.prune(id)
         return status
     }
 }
@@ -138,7 +164,8 @@ enum Sessions {
         return Paths.claudeProjects.appendingPathComponent(Paths.claudeProjectName(real ?? workdir))
     }
 
-    /// その実行の間に作られたセッション。複数あれば最後に書かれたもの。
+    /// その実行の間に作られた、`claude -p` のセッション。複数あれば最後に書かれたもの。
+    /// 同じフォルダで利用者が対話で使ったセッションは、記録の entrypoint が `sdk-` で始まらないので外す。
     /// スクリプトの中で別のフォルダへ移ってから claude を呼んだ場合は見つからない
     static func find(folder workdir: String, from start: Date, to end: Date) -> String? {
         let keys: [URLResourceKey] = [.creationDateKey, .contentModificationDateKey]
@@ -151,11 +178,24 @@ enum Sessions {
             .compactMap { url -> (String, Date)? in
                 guard let values = try? url.resourceValues(forKeys: Set(keys)),
                     let created = values.creationDate,
-                    created >= start.addingTimeInterval(-1), created <= end.addingTimeInterval(1)
+                    created >= start.addingTimeInterval(-1), created <= end.addingTimeInterval(1),
+                    isNonInteractive(url)
                 else { return nil }
                 return (url.deletingPathExtension().lastPathComponent, values.contentModificationDate ?? created)
             }
             .max { $0.1 < $1.1 }?.0
+    }
+
+    /// 記録の頭に `"entrypoint":"sdk-cli"` のような印があるか
+    static func isNonInteractive(_ transcript: URL) -> Bool {
+        guard let handle = try? FileHandle(forReadingFrom: transcript) else { return false }
+        defer { try? handle.close() }
+        let head = String(decoding: (try? handle.read(upToCount: 64 * 1024)) ?? Data(), as: UTF8.self)
+        return isNonInteractive(head: head)
+    }
+
+    static func isNonInteractive(head: String) -> Bool {
+        head.contains("\"entrypoint\":\"sdk-")
     }
 
     static func transcript(folder workdir: String, session: String) -> URL {

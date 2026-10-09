@@ -8,10 +8,14 @@ enum CLI {
                     [--summary <text>] [--also-log <file>] -- <command> [args...]
               Register a job and load it into launchd. <id> is lowercase letters, digits and '-'.
               <days> is like 1-5 or 0,6 (0 = Sunday). Omit it to run every day.
-              Re-running add with the same <id> replaces the job.
+              Re-running add with the same <id> replaces the job. Times are local time.
+              A bare command name such as `claude` is resolved to its full path through your PATH now,
+              because launchd runs jobs with a minimal PATH.
           owler import <plist> --id <id> [--folder <dir>] [--summary <text>]
               Take over an existing launchd job. The old job is unloaded and its plist is moved to
-              ~/Library/Application Support/Owler/imported/. Its StandardOutPath keeps receiving output.
+              ~/Library/Application Support/Owler/imported/. Its StandardOutPath keeps receiving output,
+              together with what went to StandardErrorPath. EnvironmentVariables are kept. A plist with other
+              keys Owler cannot carry over is refused.
           owler remove <id>       Unload a job and delete it.
           owler start <id>        Run a job now.
           owler list              Show jobs and their last run.
@@ -55,6 +59,9 @@ enum CLI {
         var tail: [String] = []
 
         func one(_ key: String) -> String? { values[key]?.last }
+
+        /// 知らない名前の先頭。綴りを間違えたオプションを黙って捨てないため
+        func unknown(allowed: Set<String>) -> String? { values.keys.sorted().first { !allowed.contains($0) } }
     }
 
     /// `--key value` を集め、`--` より後ろはそのまま残す
@@ -84,6 +91,12 @@ enum CLI {
     static func add(_ args: [String]) -> Int32 {
         guard let o = parse(args), let id = o.positional.first, let folder = o.one("folder"), !o.tail.isEmpty
         else { return fail(usage) }
+        if let unknown = o.unknown(allowed: ["folder", "at", "weekdays", "summary", "also-log"]) {
+            return fail("Unknown option --\(unknown)")
+        }
+        guard let executable = resolve(o.tail[0]) else {
+            return fail("Cannot find the command \(o.tail[0]). Give its full path")
+        }
         guard Job.isValidID(id) else { return fail("Invalid id: \(id)") }
         let times = (o.values["at"] ?? []).map(ScheduleParser.time)
         guard !times.isEmpty, !times.contains(where: { $0 == nil }) else { return fail("Give --at as HH:MM") }
@@ -96,7 +109,7 @@ enum CLI {
             id: id,
             summary: o.one("summary") ?? "",
             folder: absolute(folder),
-            command: o.tail,
+            command: [executable] + o.tail.dropFirst(),
             schedule: ScheduleParser.slots(times: times.compactMap { $0 }, weekdays: weekdays),
             alsoLogTo: o.one("also-log").map(absolute))
         return install(job)
@@ -104,6 +117,7 @@ enum CLI {
 
     static func importJob(_ args: [String]) -> Int32 {
         guard let o = parse(args), let path = o.positional.first, let id = o.one("id") else { return fail(usage) }
+        if let unknown = o.unknown(allowed: ["id", "folder", "summary"]) { return fail("Unknown option --\(unknown)") }
         guard Job.isValidID(id) else { return fail("Invalid id: \(id)") }
         let source = URL(fileURLWithPath: absolute(path))
         guard let data = try? Data(contentsOf: source),
@@ -111,8 +125,16 @@ enum CLI {
             let label = plist["Label"] as? String
         else { return fail("Cannot read \(source.path)") }
         if label.hasPrefix(Paths.labelPrefix) { return fail("\(label) is already an Owler job") }
-        let command =
-            plist["ProgramArguments"] as? [String] ?? (plist["Program"] as? String).map { [$0] } ?? []
+        // 引き継げない設定を黙って捨てると、取り込んだあとで動きが変わる。持っていたら断る
+        let carried: Set<String> = [
+            "Label", "ProgramArguments", "StartCalendarInterval", "WorkingDirectory", "StandardOutPath",
+            "StandardErrorPath", "EnvironmentVariables",
+        ]
+        let dropped = Set(plist.keys).subtracting(carried).sorted()
+        guard dropped.isEmpty else {
+            return fail("\(label) has keys Owler cannot carry over: \(dropped.joined(separator: ", "))")
+        }
+        let command = plist["ProgramArguments"] as? [String] ?? []
         guard !command.isEmpty else { return fail("\(label) has no ProgramArguments") }
         guard let schedule = ScheduleParser.slots(fromLaunchd: plist["StartCalendarInterval"]) else {
             return fail("\(label) has no StartCalendarInterval that Owler can express (Hour, Minute, Weekday)")
@@ -126,13 +148,14 @@ enum CLI {
             folder: folder,
             command: command,
             schedule: schedule,
-            alsoLogTo: plist["StandardOutPath"] as? String)
+            alsoLogTo: plist["StandardOutPath"] as? String ?? plist["StandardErrorPath"] as? String,
+            environment: plist["EnvironmentVariables"] as? [String: String])
 
         // 新しいほうを入れてから古いほうを外す。両方が入っている間に時刻が来ると2回動くが、
         // 先に外して入れ損ねると1回も動かなくなる。こちらのほうが害が大きい
         let status = install(job)
         guard status == 0 else { return status }
-        Launchctl.bootout(label)
+        Launchctl.bootoutAndWait(label)
         let fm = FileManager.default
         try? fm.createDirectory(at: Paths.importedDir, withIntermediateDirectories: true)
         let backup = Paths.importedDir.appendingPathComponent(source.lastPathComponent)
@@ -156,6 +179,7 @@ enum CLI {
                 case .running: "running"
                 case .succeeded: "ok"
                 case .failed: "failed (\(last?.exitCode ?? 0))"
+                case .interrupted: "interrupted"
                 case nil: "never run"
                 }
             print("\(job.id)\t\(job.scheduleText)\t\(state)\t\(job.summary)")
@@ -192,6 +216,20 @@ enum CLI {
         guard let id = args.first, JobStore.load(id) != nil else { return fail("No such job: \(args.first ?? "")") }
         action(id)
         return 0
+    }
+
+    /// コマンドの名前を、実行ファイルの絶対パスにする。launchd は PATH を絞って動かすので、
+    /// 名前だけでは見つからない。`/` を含むならそのフォルダから、含まないなら今の PATH から探す
+    static func resolve(_ command: String, environment: [String: String] = ProcessInfo.processInfo.environment)
+        -> String?
+    {
+        let fm = FileManager.default
+        if command.contains("/") {
+            let path = absolute(command)
+            return fm.isExecutableFile(atPath: path) ? path : nil
+        }
+        let dirs = (environment["PATH"] ?? "/usr/bin:/bin").split(separator: ":").map(String.init)
+        return dirs.map { "\($0)/\(command)" }.first { fm.isExecutableFile(atPath: $0) }
     }
 
     static func absolute(_ path: String) -> String {

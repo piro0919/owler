@@ -17,6 +17,10 @@ final class Model: ObservableObject {
     }
     /// 開いている回。nil ならジョブのページ
     @Published var openedRunID: String?
+    /// 実行中の回があるあいだ、読み直すたびに進める。回のページの出力を描き直させる
+    @Published private(set) var tick = 0
+    /// 終わった回の報告。記録は数 MB になるので、描くたびに読まない
+    private var reports: [String: String?] = [:]
 
     private var timer: Timer?
 
@@ -45,6 +49,16 @@ final class Model: ObservableObject {
     private func loadRuns() {
         let runs = selectedJob.map { RunStore.all($0) } ?? []
         if runs != self.runs { self.runs = runs }
+        if runs.contains(where: { $0.state == .running }) { tick += 1 }
+    }
+
+    /// その回の Claude の最後の発言。終わった回は一度読んだら覚えておく
+    func report(job: Job, run: RunRecord) -> String? {
+        guard let session = run.session else { return nil }
+        if run.end != nil, let cached = reports[session] { return cached }
+        let reply = Sessions.lastReply(in: Sessions.transcript(folder: Paths.expand(job.folder), session: session))
+        if run.end != nil { reports[session] = reply }
+        return reply
     }
 
     func runNow(_ id: String) {
@@ -212,7 +226,7 @@ struct RunPage: View {
                     OpenButton(model: model)
                 }
 
-                if let reply = report {
+                if let reply = model.report(job: job, run: run) {
                     Titled(Strings.report) {
                         Text(reply)
                             .textSelection(.enabled)
@@ -239,11 +253,6 @@ struct RunPage: View {
         let name = Strings.stateName(run)
         guard let end = run.end else { return name }
         return "\(name) · \(Format.duration(end.timeIntervalSince(run.start)))"
-    }
-
-    private var report: String? {
-        guard let session = run.session else { return nil }
-        return Sessions.lastReply(in: Sessions.transcript(folder: Paths.expand(job.folder), session: session))
     }
 }
 
@@ -326,6 +335,7 @@ struct StateDot: View {
         case .running: .blue
         case .succeeded: .green
         case .failed: .red
+        case .interrupted: .orange
         case nil: .gray.opacity(0.5)
         }
     }

@@ -13,9 +13,11 @@ struct Job: Codable, Identifiable, Equatable {
     var schedule: [Slot]
     /// 実行の出力を、Owler の記録とは別にここへも足す。取り込む前のログを途切れさせないため
     var alsoLogTo: String?
+    /// 足す環境変数。取り込んだ plist の EnvironmentVariables を引き継ぐ
+    var environment: [String: String]?
 
     /// 動かす時刻。曜日が無ければ毎日。曜日は launchd と同じく 0 と 7 が日曜
-    struct Slot: Codable, Equatable {
+    struct Slot: Codable, Equatable, Hashable {
         var hour: Int
         var minute: Int
         var weekday: Int?
@@ -55,16 +57,31 @@ struct Job: Codable, Identifiable, Equatable {
         }.min()
     }
 
-    /// いつ動くかの短い説明。時刻と曜日の書き方は地域に従う（アメリカの英語なら 3:33 AM）
+    /// いつ動くかの短い説明。時刻と曜日の書き方は地域に従う（アメリカの英語なら 3:33 AM）。
+    /// 時刻×曜日の組み合わせが揃っていれば「月・金 9:00」とまとめ、揃っていなければ枠ごとに並べる
     func scheduleText(locale: Locale = Strings.locale) -> String {
-        let days = Set(schedule.map(\.weekday))
-        let times = Array(Set(schedule.map { $0.hour * 60 + $0.minute })).sorted()
-            .map { Format.timeOfDay(hour: $0 / 60, minute: $0 % 60, locale: locale) }
-        let timeText = times.joined(separator: ", ")
         let ja = locale.language.languageCode?.identifier == "ja"
-        if days == [nil] { return ja ? "毎日 \(timeText)" : "Daily at \(timeText)" }
-        let names = days.compactMap { $0 }.map { $0 % 7 }.sorted().map { Format.weekday($0, locale: locale) }
-        return ja ? "\(names.joined(separator: "・")) \(timeText)" : "\(names.joined(separator: ", ")) at \(timeText)"
+        let slots = Set(schedule.map { Slot(hour: $0.hour, minute: $0.minute, weekday: $0.weekday.map { $0 % 7 }) })
+        let minutes = Set(slots.map { $0.hour * 60 + $0.minute }).sorted()
+        let days = Set(slots.map(\.weekday))
+        let time = { (m: Int) in Format.timeOfDay(hour: m / 60, minute: m % 60, locale: locale) }
+        let dayNames = { (ds: [Int]) in
+            ds.map { Format.weekday($0, locale: locale) }.joined(separator: ja ? "・" : ", ")
+        }
+        let isGrid = slots.count == minutes.count * days.count && (days == [nil] || !days.contains(nil))
+        if isGrid {
+            let times = minutes.map(time).joined(separator: ", ")
+            if days == [nil] { return ja ? "毎日 \(times)" : "Daily at \(times)" }
+            let names = dayNames(days.compactMap { $0 }.sorted())
+            return ja ? "\(names) \(times)" : "\(names) at \(times)"
+        }
+        return slots.sorted { ($0.weekday ?? -1, $0.hour, $0.minute) < ($1.weekday ?? -1, $1.hour, $1.minute) }
+            .map { slot in
+                let t = time(slot.hour * 60 + slot.minute)
+                guard let day = slot.weekday else { return ja ? "毎日 \(t)" : "Daily \(t)" }
+                return "\(dayNames([day])) \(t)"
+            }
+            .joined(separator: ", ")
     }
 
     var scheduleText: String { scheduleText() }
@@ -145,19 +162,36 @@ enum JobStore {
         let fm = FileManager.default
         try fm.createDirectory(at: Paths.jobsDir, withIntermediateDirectories: true)
         try fm.createDirectory(at: Paths.launchAgents, withIntermediateDirectories: true)
+        let previous = load(job.id)
+        try write(plistFor: job, owler: owler)
+        // 読み込み済みなら外してから入れ直す。外さずに入れると古い定義のまま残る。
+        // bootout はすぐには終わらないので、外れたのを確かめてから入れる
+        Launchctl.bootoutAndWait(Paths.label(job.id))
+        do {
+            try Launchctl.bootstrap(Paths.plist(job.id))
+        } catch {
+            // 入れ損ねたら前の定義に戻す。定義だけ新しくなって launchd に何も無い、という半端を残さない
+            if let previous {
+                try? write(plistFor: previous, owler: owler)
+                try? Launchctl.bootstrap(Paths.plist(job.id))
+            } else {
+                try? FileManager.default.removeItem(at: Paths.plist(job.id))
+            }
+            throw error
+        }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         try encoder.encode(job).write(to: Paths.job(job.id))
+    }
+
+    private static func write(plistFor job: Job, owler: String) throws {
         let plist = try PropertyListSerialization.data(
             fromPropertyList: job.launchdPlist(owler: owler), format: .xml, options: 0)
         try plist.write(to: Paths.plist(job.id))
-        // 読み込み済みなら外してから入れ直す。外さずに入れると古い定義のまま残る
-        Launchctl.bootout(Paths.label(job.id))
-        try Launchctl.bootstrap(Paths.plist(job.id))
     }
 
     static func remove(_ id: String) {
-        Launchctl.bootout(Paths.label(id))
+        Launchctl.bootoutAndWait(Paths.label(id))
         try? FileManager.default.removeItem(at: Paths.plist(id))
         try? FileManager.default.removeItem(at: Paths.job(id))
     }
@@ -185,12 +219,24 @@ enum Launchctl {
         return (process.terminationStatus, String(decoding: data, as: UTF8.self))
     }
 
+    /// 外した直後は「入出力エラー」で断られることがあるので、少し間を置いて数回試す
     static func bootstrap(_ plist: URL) throws {
-        let result = call(["bootstrap", domain, plist.path])
+        var result = call(["bootstrap", domain, plist.path])
+        for _ in 0..<5 where result.status != 0 {
+            usleep(500_000)
+            result = call(["bootstrap", domain, plist.path])
+        }
         if result.status != 0 { throw Failure(description: "launchctl bootstrap: \(result.output)") }
     }
 
-    /// 読み込まれていなくても失敗にしない
+    static func isLoaded(_ label: String) -> Bool { call(["print", "\(domain)/\(label)"]).status == 0 }
+
+    /// 外して、外れたのを確かめる。読み込まれていなくても失敗にしない
+    static func bootoutAndWait(_ label: String) {
+        call(["bootout", "\(domain)/\(label)"])
+        for _ in 0..<50 where isLoaded(label) { usleep(100_000) }
+    }
+
     static func bootout(_ label: String) { call(["bootout", "\(domain)/\(label)"]) }
 
     /// 時刻を待たずに今すぐ動かす

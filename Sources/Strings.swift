@@ -87,6 +87,7 @@ enum Strings {
         case .running: running
         case .succeeded: succeeded
         case .failed: failed(run.exitCode ?? 0)
+        case .interrupted: interrupted
         }
     }
     static func nextRun(_ when: String) -> String { t("次回 \(when)", "Next \(when)") }
@@ -95,8 +96,10 @@ enum Strings {
         case .running: running
         case .succeeded: succeeded
         case .failed: t("失敗", "Failed")
+        case .interrupted: interrupted
         }
     }
+    static var interrupted: String { t("中断", "Interrupted") }
     static var report: String { t("Claude の報告", "Claude's report") }
     static var output: String { t("出力", "Output") }
     static var noOutput: String { t("出力はありません", "No output") }
