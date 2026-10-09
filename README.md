@@ -23,7 +23,13 @@ the Command Line Tools.
 
 ## Installing
 
-Download the DMG from [Releases](https://github.com/piro0919/owler/releases/latest)
+With Homebrew:
+
+```bash
+brew install --cask piro0919/tap/owler
+```
+
+Or download the DMG from [Releases](https://github.com/piro0919/owler/releases/latest)
 and drag Owler into Applications.
 
 The first launch will be blocked: Owler is signed with a self-signed certificate,
