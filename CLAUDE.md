@@ -58,8 +58,13 @@ prompt は送られず入力欄に入るだけ。
 open ./Owler.app
 ```
 
-plist には、登録したときの Owler の実行ファイルのパスが入る。手元では `~/Repository/owler/Owler.app` のもの。
-置き場所を変えたら、各ジョブを `Owler add` か `import` で入れ直す。
+plist には、登録したときの Owler の実行ファイルのパスが入る。手元の Mac では 2026-10-09 から Homebrew で入れた
+`/Applications/Owler.app` を使っていて、ジョブもそこを呼ぶ。置き場所を変えたら、各ジョブを `Owler add` か `import` で入れ直す。
+
+**Gatekeeper に通すまでは、launchd からの起動も黙って殺される。** 自己署名なので、ダウンロードした版は
+「プライバシーとセキュリティ」の「このまま開く」を押すまで、窓の起動もコマンドとしての起動も止められる。
+コマンドは終了コード 137（SIGKILL）で何も出さずに終わり、`/usr/bin/log` には AppleSystemPolicy の
+「Security policy would not allow process」が残る。押したあとは launchd からの起動も通る（実測）。
 
 ## リリース
 
@@ -69,7 +74,6 @@ GitHub Releases に上げる。リリースノートは CHANGELOG.md のその�
 
 ## まだやっていないこと
 
-- GitHub への公開、Homebrew の cask、LP
 - `owler` をシェルから短い名前で呼べるようにすること
 
 ## アイコン
