@@ -1,0 +1,112 @@
+{
+  "meta": {
+    "title": "Owler — your scheduled jobs, watched from the editor",
+    "description": "A Mac app that lists the jobs you run on launchd and keeps the result of every run. Open any run in Claude Code inside Cursor or VS Code."
+  },
+  "hero": {
+    "tagline": "Your jobs run at night. Owler keeps watch.",
+    "lead": "A claude -p every morning, an import every evening. The more jobs you schedule, the less you know how many there are and whether last night's run worked. Owler keeps the result of every run, and opens any of them in Claude Code inside your editor.",
+    "download": "Download for free",
+    "requirement": "macOS 14 or later · Apple silicon"
+  },
+  "flow": {
+    "title": "Look, open, ask",
+    "steps": [
+      {
+        "title": "Jobs run on time",
+        "body": "launchd runs your jobs. They fire whether Owler is open or not."
+      },
+      {
+        "title": "Every run is kept",
+        "body": "When it ran and whether it worked. The output, and claude -p's last message, are kept for each run."
+      },
+      {
+        "title": "Dig in from the editor",
+        "body": "Click Open in Claude Code on a run. The job's folder comes to the front and a conversation about that run starts."
+      }
+    ]
+  },
+  "features": {
+    "title": "What it does",
+    "records": {
+      "title": "A record of every run",
+      "body": "Start, end, exit code and output, every time. Runs beyond the latest 100 are cleared."
+    },
+    "claude": {
+      "title": "Reads claude -p's report",
+      "body": "When a job runs claude -p, Owler finds the transcript and shows Claude's last message on the run's page."
+    },
+    "editor": {
+      "title": "Cursor and VS Code",
+      "body": "Owler brings the job's folder to the front, then opens a Claude Code conversation there. No desktop app needed."
+    },
+    "add": {
+      "title": "Set jobs up with Claude",
+      "body": "Click New Job and a conversation opens to decide what to run and when. Once you agree, Claude registers it with Owler. Existing launchd jobs can be imported."
+    },
+    "menubar": {
+      "title": "In the menu bar too",
+      "body": "The last result of each job sits in the menu bar. A number next to the owl counts the jobs whose last run failed. You can turn it off."
+    }
+  },
+  "install": {
+    "title": "Getting started",
+    "steps": [
+      {
+        "title": "Install",
+        "body": "Download the DMG and drag Owler into Applications. Homebrew works too."
+      },
+      {
+        "title": "Let it open",
+        "body": "The author is not a registered Apple developer, so the first launch is blocked. Click Open Anyway in System Settings → Privacy & Security."
+      },
+      {
+        "title": "Add a job",
+        "body": "Click New Job at the bottom left of the window and talk it through with Claude Code."
+      }
+    ],
+    "accessibility": "Allow Accessibility access when asked. Owler uses it to bring the editor window to the front.",
+    "cta": "Download for free"
+  },
+  "footer": {
+    "source": "Source code",
+    "releases": "Releases",
+    "privacy": "Privacy"
+  },
+  "language": {
+    "ja": "日本語",
+    "en": "English"
+  },
+  "privacy": {
+    "title": "Privacy Policy",
+    "updated": "Last updated: October 9, 2026",
+    "intro": "Owler runs the jobs you register on launchd and shows their records. That is all it does. There is no server, no analytics and no account.",
+    "sections": [
+      {
+        "title": "What it reads and writes",
+        "body": "Job definitions, and the record and output of each run, live in ~/Library/Application Support/Owler. The launchd agents live in ~/Library/LaunchAgents. When a job runs claude -p, Owler looks for that folder's Claude Code transcript and reads the last message. To find the editor window, it reads the titles of Cursor and VS Code windows."
+      },
+      {
+        "title": "Nothing leaves your Mac",
+        "body": "Every record stays on this Mac. Nothing is collected and nothing is sent anywhere."
+      },
+      {
+        "title": "Update checks go to GitHub",
+        "body": "Owler checks for a new version once at launch. The check fetches one small file from GitHub Releases, so GitHub sees a request with your IP address, like any download. It carries nothing about your jobs."
+      },
+      {
+        "title": "No analytics",
+        "body": "There are no crash reports, no usage tracking, no device IDs and no third-party SDKs in the app."
+      },
+      {
+        "title": "You can check all of this",
+        "body": "Owler is open source under the MIT license. Everything on this page can be checked in the source code. If something looks wrong, open an issue."
+      },
+      {
+        "title": "Changes",
+        "body": "If a future version handles data differently, this page is updated before that version ships."
+      }
+    ],
+    "back": "Back to Owler"
+  }
+}

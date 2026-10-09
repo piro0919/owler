@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+/* 色はアプリのアイコンから引く。藍から紺の夜空と、フクロウの琥珀の目 */
+@theme {
+  --color-mist: #f5f6ff;
+  --color-mist-deep: #e6e9fb;
+  --color-ink: #12163a;
+  --color-line: #d7dcf5;
+  --color-amber: #ffb23e;
+  --color-indigo: #3b4cca;
+  --color-navy: #141a4a;
+  --color-night: #0b0f2e;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-mist);
+  color: var(--color-ink);
+
+  /* 日本語を語のまとまりで折り返す。これが無いと見出しが「を、」や
+     「キ／ーボード」で割れる。対応していないブラウザでは従来どおり */
+  word-break: auto-phrase;
+}
+
+/* 見出しの書体。兄弟分の Hawky と同じ角の立った太字 */
+.display {
+  font-family: var(--font-display), var(--font-body), sans-serif;
+  letter-spacing: 0.01em;
+}
+
+/* アイコンと同じ向きのグラデーション */
+.sky {
+  background: linear-gradient(160deg, var(--color-indigo) 0%, var(--color-navy) 100%);
+}
+
+/* 夜通し見張るフクロウの視線。区画の上から斜めに落ちる細い光 */
+.dive {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    120deg,
+    transparent 0 46px,
+    rgb(255 255 255 / 0.07) 46px 48px
+  );
+  pointer-events: none;
+}

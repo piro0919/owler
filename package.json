@@ -1,0 +1,8 @@
+{
+  "name": "owler",
+  "private": true,
+  "scripts": {
+    "lp:dev": "pnpm --filter owler-lp dev",
+    "lp:build": "pnpm --filter owler-lp build"
+  }
+}
