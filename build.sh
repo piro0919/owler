@@ -88,6 +88,11 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleVersion</key><string>${VERSION}</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>NSHighResolutionCapable</key><true/>
+  <!-- これが無いと Sparkle の画面が英語で出る。訳は Sparkle 側が持っている。
+       Owler の文字は日本語以外では英語なので、どれにも当たらないときは英語に倒す -->
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>CFBundleLocalizations</key>
+  <array><string>en</string><string>ja</string></array>
 
   <!-- 自動更新（Sparkle）。確認は起動時に1回だけ行い、見つかったときだけ画面を出す。
        この2つを false にしておかないと、初回起動で「自動で確認していいか」を尋ねる画面が出る -->

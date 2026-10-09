@@ -74,7 +74,9 @@ plist には、登録したときの Owler の実行ファイルのパスが入�
 ## リリース
 
 Hawky と同じ。`./release.sh <版>` でビルド・`--selftest`・DMG・更新用の zip・署名した `appcast.xml` を作り、
-GitHub Releases に上げる。リリースノートは CHANGELOG.md のその版の節から取る。Sparkle の鍵は兄弟分と共有で、
+GitHub Releases に上げる。リリースノートは CHANGELOG.md のその版の節から取る。
+Sparkle の画面の言語は、Info.plist の `CFBundleLocalizations` に従う。書かないと、日本語の Mac でも英語で出る
+（0.1.3 まではそうだった）。Sparkle の鍵は兄弟分と共有で、
 秘密鍵はログインキーチェーンにある。署名は自己署名の「Okigae Dev」。
 
 ## まだやっていないこと
