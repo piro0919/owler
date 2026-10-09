@@ -1,9 +1,5 @@
 import AppKit
 
-extension String {
-    var nilIfEmpty: String? { isEmpty ? nil : self }
-}
-
 extension Notification.Name {
     static let menuBarSettingChanged = Notification.Name("owler.menuBarSettingChanged")
 }
@@ -52,9 +48,11 @@ final class MenuBar: NSObject, NSMenuDelegate {
             self.item = item
             refresh()
             // 実行の始まりに気付くのが遅れないよう、窓と同じ3秒ごとに読み直す
-            timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
-                MainActor.assumeIsolated { self?.refresh() }
-            }
+            timer = Self.schedule(every: 3) { [weak self] in self?.refresh() }
+            // 「視差効果を減らす」を切り替えたら、次の読み直しを待たずに輪を止める・回す
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(displayOptionsChanged),
+                name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
         } else {
             timer?.invalidate()
             timer = nil
@@ -85,10 +83,16 @@ final class MenuBar: NSObject, NSMenuDelegate {
             failed + running > 0
             ? StatusTitle.image(icon: Self.statusIcon, failed: failed, running: running, phase: phase)
             : Self.statusIcon
-        button.toolTip =
-            [
-                failed > 0 ? Strings.failedJobs(failed) : nil, running > 0 ? Strings.runningJobs(running) : nil,
-            ].compactMap { $0 }.joined(separator: "\n").nilIfEmpty ?? "Owler"
+        // 吹き出しは付け直すたびに消える。輪を描き直すたびに付け直すと読めなくなるので、変わったときだけ
+        let parts = [
+            failed > 0 ? Strings.failedJobs(failed) : nil, running > 0 ? Strings.runningJobs(running) : nil,
+        ].compactMap { $0 }
+        let tip = parts.isEmpty ? "Owler" : parts.joined(separator: "\n")
+        if button.toolTip != tip {
+            button.toolTip = tip
+            // 件数は絵の中にしかないので、VoiceOver には同じ文を読ませる
+            button.setAccessibilityLabel(tip)
+        }
     }
 
     /// 輪は 15 fps で描き直す。Hawky と同じ速さで、0.8 秒で一周する
@@ -103,13 +107,21 @@ final class MenuBar: NSObject, NSMenuDelegate {
             return
         }
         let interval = 1.0 / 15
-        animation = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                self.phase = (self.phase + CGFloat(interval / 0.8)).truncatingRemainder(dividingBy: 1)
-                self.draw()
-            }
+        animation = Self.schedule(every: interval) { [weak self] in
+            guard let self else { return }
+            self.phase = (self.phase + CGFloat(interval / 0.8)).truncatingRemainder(dividingBy: 1)
+            self.draw()
         }
+    }
+
+    @objc private func displayOptionsChanged() { animate() }
+
+    /// メニューを開いている間も止まらないよう、common モードで回す。scheduledTimer は default モードだけで、
+    /// メニューの操作中（eventTracking）は止まる
+    private static func schedule(every interval: TimeInterval, _ action: @escaping @MainActor () -> Void) -> Timer {
+        let timer = Timer(timeInterval: interval, repeats: true) { _ in MainActor.assumeIsolated { action() } }
+        RunLoop.main.add(timer, forMode: .common)
+        return timer
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {

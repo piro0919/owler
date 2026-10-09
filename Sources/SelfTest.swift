@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 /// 画面も launchd も触らずに、規則だけを確かめる。`./Owler --selftest` で走る
 @MainActor
@@ -109,6 +109,16 @@ enum SelfTest {
             check(
                 job([Job.Slot(hour: 9, minute: 0, weekday: 0), Job.Slot(hour: 9, minute: 0, weekday: 7)])
                     .scheduleText(locale: ja) == "日 9:00", "0 と 7 は同じ日曜")
+        }
+
+        // メニューバーの絵
+        do {
+            let icon = NSImage(size: NSSize(width: 18, height: 18))
+            let single = StatusTitle.image(icon: icon, failed: 1, running: 0, phase: 0)
+            let both = StatusTitle.image(icon: icon, failed: 1, running: 12, phase: 0.5)
+            check(single.size.height == 22, "メニューバーの厚みに収める")
+            check(single.size.width > 18 && single.isTemplate, "影絵の右に印と数を足し、テンプレート画像にする")
+            check(both.size.width >= single.size.width, "桁が増えれば幅も増える")
         }
 
         // 子の終わり方

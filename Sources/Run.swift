@@ -13,12 +13,19 @@ struct RunRecord: Codable, Equatable, Identifiable {
 
     var id: String { stamp }
 
+    /// その番号のプロセスが Owler か。記録を取る Owler run が止まったあと、番号が別のプロセスに回ることがある
+    static func isOwler(_ pid: Int32) -> Bool {
+        var buffer = [CChar](repeating: 0, count: 4096)
+        guard proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 else { return false }
+        return String(cString: buffer).hasSuffix("/Owler")
+    }
+
     /// interrupted は、終わりを書く前に `Owler run` ごと止められた回（登録し直し・ログアウト・電源断など）
     enum State { case running, succeeded, failed, interrupted }
 
     var state: State {
         if let exitCode { return exitCode == 0 ? .succeeded : .failed }
-        guard let pid, kill(pid, 0) == 0 || errno == EPERM else { return .interrupted }
+        guard let pid, kill(pid, 0) == 0 || errno == EPERM, Self.isOwler(pid) else { return .interrupted }
         return .running
     }
 }
