@@ -111,6 +111,14 @@ enum SelfTest {
                     .scheduleText(locale: ja) == "日 9:00", "0 と 7 は同じ日曜")
         }
 
+        // 子の終わり方
+        do {
+            check(Spawn.exitCode(fromWaitStatus: 0) == 0, "正常に終われば 0")
+            check(Spawn.exitCode(fromWaitStatus: 3 << 8) == 3, "終了コードを読む")
+            check(Spawn.exitCode(fromWaitStatus: 15) == 143, "シグナルで止まれば 128 + 番号")
+            check(Spawn.canDisclaim, "ジョブを Owler の許可から切り離せる")
+        }
+
         // 中断した回
         do {
             var run = RunRecord(stamp: "x", start: Date(), pid: getpid())

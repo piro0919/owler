@@ -106,16 +106,9 @@ enum Runner {
                 return handle
             }
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: Paths.expand(executable))
-        process.arguments = Array(job.command.dropFirst())
-        process.currentDirectoryURL = URL(fileURLWithPath: Paths.expand(job.folder))
-        if let extra = job.environment {
-            process.environment = ProcessInfo.processInfo.environment.merging(extra) { _, new in new }
-        }
+        var environment = ProcessInfo.processInfo.environment
+        if let extra = job.environment { environment.merge(extra) { _, new in new } }
         let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
         let done = DispatchSemaphore(value: 0)
         pipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
@@ -129,13 +122,17 @@ enum Runner {
 
         let status: Int32
         do {
-            try process.run()
-            process.waitUntilExit()
+            let pid = try Spawn.run(
+                executable: Paths.expand(executable), arguments: Array(job.command.dropFirst()),
+                folder: Paths.expand(job.folder), environment: environment,
+                output: pipe.fileHandleForWriting.fileDescriptor)
+            // 子に渡した書き口は閉じる。開いたままだと、子が終わっても終わりの印が来ない
+            try? pipe.fileHandleForWriting.close()
+            status = Spawn.wait(pid)
             // 裏で起こした子が出力をつかんだまま残ると、終わりの印が来ない。少しだけ待って読むのをやめる
             if done.wait(timeout: .now() + 2) == .timedOut {
                 pipe.fileHandleForReading.readabilityHandler = nil
             }
-            status = process.terminationStatus
         } catch {
             pipe.fileHandleForReading.readabilityHandler = nil
             for output in outputs { output.write(Data("Owler: \(error)\n".utf8)) }
@@ -149,6 +146,73 @@ enum Runner {
         try? RunStore.save(record, for: id)
         RunStore.prune(id)
         return status
+    }
+}
+
+/// ジョブのコマンドを起こす。Owler はエディタの窓を前に出すためにアクセシビリティの許可を持つが、
+/// Process で起こすと子はその許可を引き継ぎ、ジョブのスクリプトがほかのアプリの画面を操作できてしまう（実測）。
+/// posix_spawn に責任の切り離し（responsibility_spawnattrs_setdisclaim）を付けて起こし、子は自分の許可で動かす。
+/// Chromium や Terminal も同じ方法で子を切り離している。関数は公開されていないので、名前で引く
+enum Spawn {
+    struct Failure: Error, CustomStringConvertible {
+        let description: String
+    }
+
+    private typealias Disclaim = @convention(c) (UnsafeMutablePointer<posix_spawnattr_t?>, Int32) -> Int32
+
+    private static let disclaim: Disclaim? = {
+        // RTLD_DEFAULT は C のマクロなので Swift から見えない。値は -2
+        guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "responsibility_spawnattrs_setdisclaim")
+        else { return nil }
+        return unsafeBitCast(symbol, to: Disclaim.self)
+    }()
+
+    /// 切り離しが使えるか。使えなければ起こさない。許可を引き継いだまま動かすよりは止まるほうがよい
+    static var canDisclaim: Bool { disclaim != nil }
+
+    static func run(
+        executable: String, arguments: [String], folder: String, environment: [String: String], output: Int32
+    ) throws -> pid_t {
+        guard let disclaim else { throw Failure(description: "cannot detach the job from Owler's permissions") }
+        var attributes: posix_spawnattr_t?
+        posix_spawnattr_init(&attributes)
+        defer { posix_spawnattr_destroy(&attributes) }
+        // 下で渡した 0〜2 番以外のファイルを子に持ち込ませない
+        posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_CLOEXEC_DEFAULT))
+        guard disclaim(&attributes, 1) == 0 else {
+            throw Failure(description: "cannot detach the job from Owler's permissions")
+        }
+
+        var actions: posix_spawn_file_actions_t?
+        posix_spawn_file_actions_init(&actions)
+        defer { posix_spawn_file_actions_destroy(&actions) }
+        posix_spawn_file_actions_addopen(&actions, 0, "/dev/null", O_RDONLY, 0)
+        posix_spawn_file_actions_adddup2(&actions, output, 1)
+        posix_spawn_file_actions_adddup2(&actions, output, 2)
+        posix_spawn_file_actions_addchdir_np(&actions, folder)
+
+        let argv = ([executable] + arguments).map { strdup($0) } + [nil]
+        let envp = environment.map { strdup("\($0.key)=\($0.value)") } + [nil]
+        defer {
+            for pointer in argv { free(pointer) }
+            for pointer in envp { free(pointer) }
+        }
+        var pid: pid_t = 0
+        let result = posix_spawn(&pid, executable, &actions, &attributes, argv, envp)
+        guard result == 0 else { throw Failure(description: "\(executable): \(String(cString: strerror(result)))") }
+        return pid
+    }
+
+    /// 終わるのを待って終了コードを返す。シグナルで止まったら 128 + シグナル番号（シェルと同じ）
+    static func wait(_ pid: pid_t) -> Int32 {
+        var status: Int32 = 0
+        while waitpid(pid, &status, 0) == -1 && errno == EINTR {}
+        return exitCode(fromWaitStatus: status)
+    }
+
+    static func exitCode(fromWaitStatus status: Int32) -> Int32 {
+        let signal = status & 0x7f
+        return signal == 0 ? (status >> 8) & 0xff : 128 + signal
     }
 }
 

@@ -19,6 +19,10 @@ Claude Code のデスクトップアプリにもローカルの定期実行は�
   - 置き場の名前は実体のパスの英数字以外を `-` にしたもの。`/tmp` は `/private/tmp` になる。
     Foundation の resolvingSymlinksInPath は逆に `/private` を剥がすので realpath を使う
   - スクリプトの中で別のフォルダへ移ってから claude を呼ぶと見つからない
+- ジョブのコマンドは Process ではなく posix_spawn で起こし、責任の切り離し（`responsibility_spawnattrs_setdisclaim`）を付ける。
+  Owler はエディタの窓を前に出すためにアクセシビリティの許可を持つ。Process で起こすと子がその許可を引き継ぎ、
+  ジョブのスクリプトがほかのアプリの画面を操作できた（2026-10-09 に実測。launchd 直では false、Owler 経由では true）。
+  切り離しは公開されていない関数なので dlsym で引き、引けなければジョブを起こさない（`Spawn`）
 - ジョブを足すのは Claude Code。窓の「新しい定期実行」は、相談の一言を入れた新しい会話をエディタで開くだけで、
   決まったら Claude が `Owler add` を呼ぶ。使い方は `Owler help`
 - 既存の launchd のジョブは `Owler import` で取り込む。新しいほうを入れてから古いほうを外し、元の plist は

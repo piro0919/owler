@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.1]
+
+- Jobs no longer inherit Owler's Accessibility access. A job's commands used to be able to control other apps once Owler had been granted Accessibility; they are now started detached from Owler's permissions
+- Open in Claude Code no longer waits 10 seconds when Accessibility access has not been granted
+
 ## [0.1.0]
 
 - First release
