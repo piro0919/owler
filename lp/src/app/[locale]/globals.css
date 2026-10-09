@@ -1,15 +1,27 @@
 @import "tailwindcss";
 
-/* 色はアプリのアイコンから引く。藍から紺の夜空と、フクロウの琥珀の目 */
+/* 手本は Vercel のトップページ。白に近い1色の地と、細い線と、黒い塗りのボタンだけで組む。
+   色はフクロウの目の琥珀だけを、光としてわずかに使う */
 @theme {
-  --color-mist: #f5f6ff;
-  --color-mist-deep: #e6e9fb;
-  --color-ink: #12163a;
-  --color-line: #d7dcf5;
+  --color-bg: #fafafa;
+  --color-card: #ffffff;
+  --color-ink: #171717;
+  --color-muted: #666666;
+  --color-line: #eaeaea;
   --color-amber: #ffb23e;
-  --color-indigo: #3b4cca;
-  --color-navy: #141a4a;
-  --color-night: #0b0f2e;
+  --font-sans: var(--font-geist), var(--font-noto-jp), system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+/* 暗い表示の設定なら黒地に。アプリの窓も暗い表示で写しているので、こちらのほうが馴染む */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0a0a0a;
+    --color-card: #111111;
+    --color-ink: #ededed;
+    --color-muted: #a1a1a1;
+    --color-line: #262626;
+  }
 }
 
 html {
@@ -17,33 +29,27 @@ html {
 }
 
 body {
-  background: var(--color-mist);
+  background: var(--color-bg);
   color: var(--color-ink);
+  font-family: var(--font-sans);
 
-  /* 日本語を語のまとまりで折り返す。これが無いと見出しが「を、」や
-     「キ／ーボード」で割れる。対応していないブラウザでは従来どおり */
+  /* 日本語を語のまとまりで折り返す。これが無いと見出しが「を、」で割れる */
   word-break: auto-phrase;
 }
 
-/* 見出しの書体。兄弟分の Hawky と同じ角の立った太字 */
+/* 大きな見出し。字間を詰めて、Vercel の見出しと同じ締まった塊にする */
 .display {
-  font-family: var(--font-display), var(--font-body), sans-serif;
-  letter-spacing: 0.01em;
+  font-weight: 600;
+  letter-spacing: -0.045em;
+  line-height: 1.05;
 }
 
-/* アイコンと同じ向きのグラデーション */
-.sky {
-  background: linear-gradient(160deg, var(--color-indigo) 0%, var(--color-navy) 100%);
-}
-
-/* 夜通し見張るフクロウの視線。区画の上から斜めに落ちる細い光 */
-.dive {
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(
-    120deg,
-    transparent 0 46px,
-    rgb(255 255 255 / 0.07) 46px 48px
+/* アイコンの後ろの光の輪。手本の三角形の後ろにあるものと同じ扱い */
+.halo {
+  background: radial-gradient(
+    closest-side,
+    color-mix(in srgb, var(--color-amber) 22%, transparent) 0%,
+    color-mix(in srgb, var(--color-ink) 4%, transparent) 55%,
+    transparent 100%
   );
-  pointer-events: none;
 }

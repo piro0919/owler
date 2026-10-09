@@ -4,53 +4,45 @@
     "description": "A Mac app that lists the jobs you run on launchd and keeps the result of every run. Open any run in Claude Code inside Cursor or VS Code."
   },
   "hero": {
-    "tagline": "Your jobs run at night. Owler keeps watch.",
-    "lead": "A claude -p every morning, an import every evening. The more jobs you schedule, the less you know how many there are and whether last night's run worked. Owler keeps the result of every run, and opens any of them in Claude Code inside your editor.",
+    "tagline": "Your scheduled jobs, watched from the editor.",
+    "points": [
+      "Runs on launchd",
+      "Keeps every run",
+      "Opens in Claude Code"
+    ],
     "download": "Download for free",
     "requirement": "macOS 14 or later · Apple silicon"
   },
-  "flow": {
-    "title": "Look, open, ask",
-    "steps": [
+  "product": {
+    "title": "Open last night's run in the morning.",
+    "statement": "A claude -p every morning, an import every evening. Every run is kept.",
+    "statementMuted": "Dig into any of them with Claude Code, right in your editor.",
+    "label": "What it does",
+    "items": [
       {
-        "title": "Jobs run on time",
-        "body": "launchd runs your jobs. They fire whether Owler is open or not."
+        "title": "A record of every run",
+        "body": "Start, end, exit code and output, every time."
       },
       {
-        "title": "Every run is kept",
-        "body": "When it ran and whether it worked. The output, and claude -p's last message, are kept for each run."
+        "title": "claude -p's report",
+        "body": "When a job runs claude -p, its last message shows on the run's page."
       },
       {
-        "title": "Dig in from the editor",
-        "body": "Click Open in Claude Code on a run. The job's folder comes to the front and a conversation about that run starts."
+        "title": "Cursor and VS Code",
+        "body": "Brings the job's folder to the front and opens a Claude Code conversation there."
+      },
+      {
+        "title": "Set jobs up with Claude",
+        "body": "Decide what to run and when, and Claude registers it."
+      },
+      {
+        "title": "Menu bar",
+        "body": "The last result of each job, with a count of failures."
       }
     ]
   },
-  "features": {
-    "title": "What it does",
-    "records": {
-      "title": "A record of every run",
-      "body": "Start, end, exit code and output, every time. Runs beyond the latest 100 are cleared."
-    },
-    "claude": {
-      "title": "Reads claude -p's report",
-      "body": "When a job runs claude -p, Owler finds the transcript and shows Claude's last message on the run's page."
-    },
-    "editor": {
-      "title": "Cursor and VS Code",
-      "body": "Owler brings the job's folder to the front, then opens a Claude Code conversation there. No desktop app needed."
-    },
-    "add": {
-      "title": "Set jobs up with Claude",
-      "body": "Click New Job and a conversation opens to decide what to run and when. Once you agree, Claude registers it with Owler. Existing launchd jobs can be imported."
-    },
-    "menubar": {
-      "title": "In the menu bar too",
-      "body": "The last result of each job sits in the menu bar. A number next to the owl counts the jobs whose last run failed. You can turn it off."
-    }
-  },
   "install": {
-    "title": "Getting started",
+    "title": "Install, talk it through, let it run.",
     "steps": [
       {
         "title": "Install",

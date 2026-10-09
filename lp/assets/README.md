@@ -1,19 +1,17 @@
 # assets
 
-`DelaGothicOne-subset.ttf` is the face drawn into the Open Graph card
-(`src/app/[locale]/opengraph-image.tsx`). It is the same display face the site
-uses for its headings, cut down to the characters the card actually shows.
+The faces drawn into the Open Graph card (`src/app/[locale]/opengraph-image.tsx`),
+cut down to the characters the card shows: Geist SemiBold for the Latin text and
+Noto Sans JP SemiBold for the Japanese line. The site itself uses the same faces
+through `next/font`.
 
-Any character missing from it silently falls back to a different face, so when
-the card's copy changes, rebuild the subset:
+A character missing from a subset falls back to a different face, so when the
+card's copy changes, fetch the subsets again. Google Fonts cuts them with the
+`text` parameter; an old user agent makes it serve WOFF, which the card can read.
 
 ```sh
-curl -sL -o /tmp/DelaGothicOne-Regular.ttf \
-  "https://github.com/google/fonts/raw/main/ofl/delagothicone/DelaGothicOne-Regular.ttf"
-
-pyftsubset /tmp/DelaGothicOne-Regular.ttf \
-  --text="Owler Your scheduled jobs, watched. 定期実行を、エディタで見張る。" \
-  --unicodes="U+0020-007E" \
-  --output-file=assets/DelaGothicOne-subset.ttf \
-  --no-hinting --desubroutinize --layout-features=''
+UA="Mozilla/5.0 (Windows NT 6.1) AppleWebKit/534.30 (KHTML, like Gecko) Safari/534.30"
+curl -s -A "$UA" "https://fonts.googleapis.com/css2?family=Geist:wght@600&text=<url-encoded text>"
+curl -s -A "$UA" "https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@600&text=<url-encoded text>"
+# download the url(...) in each response into assets/
 ```

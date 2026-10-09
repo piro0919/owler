@@ -8,17 +8,29 @@ const REPO = "https://github.com/piro0919/owler";
 const DOWNLOAD = `${REPO}/releases/latest`;
 const BREW = "brew install --cask piro0919/tap/owler";
 
-type Step = { title: string; body: string };
+type Item = { title: string; body: string };
 
 type PageProps = {
   params: Promise<{ locale: string }>;
 };
 
-function DownloadButton({ children }: { children: ReactNode }) {
+/// 手本は Vercel のボタン。黒い塗りと、細い線の2種類だけ
+function PrimaryButton({ children, href }: { children: ReactNode; href: string }) {
   return (
     <a
-      className="inline-block rounded-full bg-white px-9 py-4 font-extrabold text-[var(--color-navy)] shadow-[0_10px_0_0_rgba(8,10,40,0.35)] transition active:translate-y-1 active:shadow-[0_4px_0_0_rgba(8,10,40,0.35)]"
-      href={DOWNLOAD}
+      className="inline-flex h-11 items-center rounded-full bg-ink px-5 font-medium text-[15px] text-bg transition hover:opacity-85"
+      href={href}
+    >
+      {children}
+    </a>
+  );
+}
+
+function SecondaryButton({ children, href }: { children: ReactNode; href: string }) {
+  return (
+    <a
+      className="inline-flex h-11 items-center rounded-full border border-line bg-card px-5 font-medium text-[15px] transition hover:border-muted"
+      href={href}
     >
       {children}
     </a>
@@ -28,8 +40,11 @@ function DownloadButton({ children }: { children: ReactNode }) {
 /// ターミナルに貼る1行。横に長いので、狭い画面では中で横に流す
 function Command({ children }: { children: string }) {
   return (
-    <pre className="overflow-x-auto rounded-2xl bg-black/40 px-5 py-4 text-left font-mono text-[13px] text-white/90 leading-relaxed">
-      <code>{children}</code>
+    <pre className="overflow-x-auto rounded-lg border border-line bg-card px-4 py-3 font-mono text-[13px] leading-relaxed">
+      <code>
+        <span className="select-none text-muted">$ </span>
+        {children}
+      </code>
     </pre>
   );
 }
@@ -39,138 +54,122 @@ export default async function Page({ params }: PageProps) {
   setRequestLocale(locale);
 
   const t = await getTranslations();
-  const flow = t.raw("flow.steps") as Step[];
-  const install = t.raw("install.steps") as Step[];
-  const features = ["records", "claude", "editor", "add", "menubar"] as const;
+  const points = t.raw("hero.points") as string[];
+  const items = t.raw("product.items") as Item[];
+  const steps = t.raw("install.steps") as Item[];
   const shot = locale === "ja" ? "/shot-ja.png" : "/shot-en.png";
 
   return (
-    <>
-      {/* 見出し */}
-      <section className="sky relative overflow-hidden px-6 pt-16 pb-24 text-white">
-        <div className="dive" />
-        <div className="relative mx-auto flex max-w-5xl flex-col items-center gap-14 lg:flex-row">
-          <div className="flex flex-1 flex-col items-center gap-6 text-center lg:items-start lg:text-left">
-            <div className="flex items-center gap-3">
-              <span className="rounded-full bg-white/20 px-4 py-1 font-bold text-sm backdrop-blur">
-                macOS
-              </span>
-              <LanguageSwitch />
-            </div>
-            <div className="flex items-center gap-4">
-              <Image
-                alt=""
-                className="h-16 w-16 drop-shadow-lg"
-                height={128}
-                priority
-                src="/icon.png"
-                width={128}
-              />
-              <span className="display text-4xl">Owler</span>
-            </div>
-            <h1 className="display text-balance text-4xl leading-[1.3] sm:text-5xl">
-              {t("hero.tagline")}
-            </h1>
-            <p className="max-w-md text-lg text-white/90 leading-relaxed">{t("hero.lead")}</p>
-            <div className="flex flex-col items-center gap-3 lg:items-start">
-              <DownloadButton>{t("hero.download")}</DownloadButton>
-              <p className="text-sm text-white/75">{t("hero.requirement")}</p>
-            </div>
-          </div>
-
-          <div className="flex flex-1 justify-center">
-            <Image
-              alt=""
-              className="w-full max-w-xl rounded-2xl shadow-[0_30px_70px_-20px_rgba(5,8,40,0.6)] ring-4 ring-white/30"
-              height={1200}
-              priority
-              src={shot}
-              width={1920}
-            />
-          </div>
+    <div className="mx-auto max-w-6xl px-6">
+      {/* 上の帯 */}
+      <header className="flex h-16 items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <Image alt="" className="h-7 w-7" height={56} priority src="/icon.png" width={56} />
+          <span className="font-semibold text-[17px] tracking-tight">Owler</span>
         </div>
+        <div className="flex items-center gap-5">
+          <LanguageSwitch />
+          <a className="hidden text-muted text-sm transition hover:text-ink sm:inline" href={REPO}>
+            GitHub
+          </a>
+        </div>
+      </header>
+
+      {/* 見出し。左に大きな見出し、真ん中にアイコン、右に短い3行 */}
+      <section className="grid items-center gap-6 py-16 lg:grid-cols-[1.2fr_1fr_0.8fr] lg:gap-12 lg:py-28">
+        <div className="flex flex-col gap-8">
+          <h1 className="display text-balance text-5xl sm:text-6xl">{t("hero.tagline")}</h1>
+          <div className="flex flex-wrap gap-3">
+            <PrimaryButton href={DOWNLOAD}>{t("hero.download")}</PrimaryButton>
+            <SecondaryButton href={REPO}>GitHub</SecondaryButton>
+          </div>
+          <p className="text-muted text-sm">{t("hero.requirement")}</p>
+        </div>
+        {/* 狭い画面では、幅いっぱいの正方形にすると前後が大きく空く。上限を付ける */}
+        <div className="halo mx-auto flex aspect-square w-full max-w-[220px] items-center justify-center lg:max-w-none">
+          <Image
+            alt=""
+            className="w-1/2 drop-shadow-[0_24px_40px_rgba(0,0,0,0.25)]"
+            height={512}
+            priority
+            src="/icon.png"
+            width={512}
+          />
+        </div>
+        <ul className="flex flex-col gap-2 text-[17px]">
+          {points.map((point) => (
+            <li key={point}>{point}</li>
+          ))}
+        </ul>
       </section>
 
-      {/* 流れ */}
-      <section className="px-6 py-20">
-        <div className="mx-auto flex max-w-5xl flex-col gap-12">
-          <h2 className="display text-center text-3xl">{t("flow.title")}</h2>
-          <ol className="grid gap-6 sm:grid-cols-3">
-            {flow.map((step, index) => (
-              <li
-                className="flex flex-col gap-3 rounded-[28px] border-2 border-[var(--color-line)] bg-white p-7 shadow-sm"
-                key={step.title}
-              >
-                <span className="display flex h-11 w-11 items-center justify-center rounded-full bg-[var(--color-indigo)] text-white text-xl">
-                  {index + 1}
-                </span>
-                <h3 className="font-extrabold text-lg">{step.title}</h3>
-                <p className="leading-relaxed opacity-75">{step.body}</p>
-              </li>
-            ))}
-          </ol>
-        </div>
-      </section>
-
-      {/* できること */}
-      <section className="bg-[var(--color-mist-deep)] px-6 py-20">
-        <div className="mx-auto flex max-w-5xl flex-col gap-12">
-          <h2 className="display text-center text-3xl">{t("features.title")}</h2>
-          <div className="grid gap-6 sm:grid-cols-2">
-            {features.map((key, index) => (
-              <div
-                className={`flex flex-col gap-3 rounded-[28px] bg-white p-8 shadow-sm ${
-                  // 数が奇数なら、最後の1つを横いっぱいに置いて半端を残さない
-                  features.length % 2 === 1 && index === features.length - 1 ? "sm:col-span-2" : ""
-                }`}
-                key={key}
-              >
-                <h3 className="font-extrabold text-xl">{t(`features.${key}.title`)}</h3>
-                <p className="leading-relaxed opacity-75">{t(`features.${key}.body`)}</p>
-              </div>
-            ))}
+      {/* 何をするアプリか。枠に入れた窓の写真と、項目名だけの短いリスト */}
+      <section className="flex flex-col gap-12 py-20">
+        <h2 className="display max-w-3xl text-balance text-4xl sm:text-5xl">
+          {t("product.title")}
+        </h2>
+        <div className="grid items-start gap-12 lg:grid-cols-[1.6fr_1fr]">
+          <div className="overflow-hidden rounded-xl border border-line bg-card p-2 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+            <Image alt="" className="w-full rounded-lg" height={1200} src={shot} width={1920} />
+          </div>
+          <div className="flex flex-col gap-8 lg:pt-4">
+            {/* 黒と灰色の2段。1つの段落に続けて流すと、灰色の頭が語の途中で折り返される */}
+            <p className="flex flex-col gap-1 text-[22px] leading-snug tracking-tight">
+              <span>{t("product.statement")}</span>
+              <span className="text-muted">{t("product.statementMuted")}</span>
+            </p>
+            <div className="flex flex-col gap-4">
+              <p className="text-muted text-sm">{t("product.label")}</p>
+              <dl className="flex flex-col gap-4">
+                {items.map((item) => (
+                  <div className="flex flex-col gap-1" key={item.title}>
+                    <dt className="font-medium text-[15px]">{item.title}</dt>
+                    <dd className="text-muted text-sm leading-relaxed">{item.body}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
           </div>
         </div>
       </section>
 
       {/* 入れ方 */}
-      <section className="relative overflow-hidden bg-[var(--color-night)] px-6 py-20 text-white">
-        <div className="relative mx-auto flex max-w-3xl flex-col gap-10">
-          <h2 className="display text-center text-3xl">{t("install.title")}</h2>
-          <ol className="flex flex-col gap-8">
-            {install.map((step, index) => (
-              <li className="flex gap-5" key={step.title}>
-                <span className="display flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-indigo)] text-lg">
-                  {index + 1}
-                </span>
-                <div className="flex min-w-0 flex-1 flex-col gap-3">
-                  <h3 className="font-extrabold text-lg">{step.title}</h3>
-                  <p className="text-white/80 leading-relaxed">{step.body}</p>
-                  {index === 0 && <Command>{BREW}</Command>}
-                </div>
-              </li>
-            ))}
-          </ol>
-          <p className="text-center text-sm text-white/70 leading-relaxed">
-            {t("install.accessibility")}
-          </p>
-          <div className="flex justify-center">
-            <DownloadButton>{t("install.cta")}</DownloadButton>
-          </div>
+      <section className="flex flex-col items-center gap-12 py-24 text-center">
+        <h2 className="display max-w-3xl text-balance text-4xl sm:text-5xl">
+          {t("install.title")}
+        </h2>
+        <ol className="grid w-full gap-px overflow-hidden rounded-xl border border-line bg-line text-left sm:grid-cols-3">
+          {steps.map((step, index) => (
+            <li className="flex flex-col gap-3 bg-card p-6" key={step.title}>
+              <span className="font-mono text-muted text-sm">
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <h3 className="font-medium text-[17px]">{step.title}</h3>
+              <p className="text-muted text-sm leading-relaxed">{step.body}</p>
+            </li>
+          ))}
+        </ol>
+        <div className="w-full max-w-xl">
+          <Command>{BREW}</Command>
         </div>
+        <p className="max-w-xl text-muted text-sm leading-relaxed">{t("install.accessibility")}</p>
+        <PrimaryButton href={DOWNLOAD}>{t("install.cta")}</PrimaryButton>
       </section>
 
-      <footer className="flex justify-center gap-6 bg-[var(--color-mist)] px-6 py-10 text-sm">
-        <a className="font-semibold opacity-60 hover:opacity-100" href={REPO}>
-          {t("footer.source")}
-        </a>
-        <a className="font-semibold opacity-60 hover:opacity-100" href={`${REPO}/releases`}>
-          {t("footer.releases")}
-        </a>
-        <Link className="font-semibold opacity-60 hover:opacity-100" href="/privacy">
-          {t("footer.privacy")}
-        </Link>
+      <footer className="flex flex-col items-center justify-between gap-4 border-line border-t py-10 text-muted text-sm sm:flex-row">
+        <span>Owler</span>
+        <div className="flex gap-6">
+          <a className="transition hover:text-ink" href={REPO}>
+            {t("footer.source")}
+          </a>
+          <a className="transition hover:text-ink" href={`${REPO}/releases`}>
+            {t("footer.releases")}
+          </a>
+          <Link className="transition hover:text-ink" href="/privacy">
+            {t("footer.privacy")}
+          </Link>
+        </div>
       </footer>
-    </>
+    </div>
   );
 }

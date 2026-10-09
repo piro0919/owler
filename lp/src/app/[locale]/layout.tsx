@@ -1,6 +1,6 @@
 import { Analytics } from "@vercel/analytics/next";
 import type { Metadata } from "next";
-import { Dela_Gothic_One, M_PLUS_2 } from "next/font/google";
+import { Geist, Geist_Mono, Noto_Sans_JP } from "next/font/google";
 import { notFound } from "next/navigation";
 import { hasLocale, NextIntlClientProvider } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
@@ -9,21 +9,18 @@ import { routing } from "@/i18n/routing";
 import { languageAlternates, localePath, ogAlternateLocales, ogLocale } from "@/i18n/urls";
 import "./globals.css";
 
-// 見出しは角の立った太字、本文は癖の少ないゴシック。どちらも日本語を持つ。
+// 手本は Vercel のトップページ。欧文は Geist、日本語は Noto Sans JP、コマンドは Geist Mono。
 // 日本語の書体は unicode-range で100件以上に割られていて、先読みすると
 // 1ページで1.5MB読む。preload を切って、使う字の分だけ取らせる
-const display = Dela_Gothic_One({
-  display: "swap",
-  preload: false,
-  variable: "--font-display",
-  weight: "400",
-});
+const sans = Geist({ display: "swap", subsets: ["latin"], variable: "--font-geist" });
 
-const body = M_PLUS_2({
+const mono = Geist_Mono({ display: "swap", subsets: ["latin"], variable: "--font-geist-mono" });
+
+const japanese = Noto_Sans_JP({
   display: "swap",
   preload: false,
-  variable: "--font-body",
-  weight: ["400", "500", "700", "800"],
+  variable: "--font-noto-jp",
+  weight: ["400", "500", "600", "700"],
 });
 
 type LayoutProps = {
@@ -74,8 +71,8 @@ export default async function Layout({ children, params }: LayoutProps) {
   setRequestLocale(locale);
 
   return (
-    <html className={`${display.variable} ${body.variable}`} lang={locale}>
-      <body className="font-[family-name:var(--font-body)] antialiased">
+    <html className={`${sans.variable} ${mono.variable} ${japanese.variable}`} lang={locale}>
+      <body className="antialiased">
         <NextIntlClientProvider>{children}</NextIntlClientProvider>
         <Analytics />
       </body>

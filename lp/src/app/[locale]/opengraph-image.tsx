@@ -14,10 +14,10 @@ export function generateStaticParams(): { locale: string }[] {
 }
 
 /* 出るのは kk-web の一覧で176px、X のカードで500px 前後。
-   その大きさで残るのはアイコンと名前と1行だけ。色はアイコンから取る */
-const NIGHT = "#0b0f2e";
-const AMBER = "#ffb23e";
-const WHITE = "#f5f6ff";
+   その大きさで残るのはアイコンと名前と1行だけ。サイトと同じく白に近い地に黒い字 */
+const BG = "#fafafa";
+const INK = "#171717";
+const MUTED = "#666666";
 
 export default async function OgImage({
   params,
@@ -26,11 +26,11 @@ export default async function OgImage({
 }): Promise<ImageResponse> {
   const { locale } = await params;
   const isJa = locale === "ja";
-  /* 見出しの書体はサイトと同じ Dela Gothic One。使う文字だけに絞ったものを
-     同梱している。文言を変えたら assets/README.md の手順で作り直す */
-  const [icon, font] = await Promise.all([
+  /* 使う文字だけに絞った書体を同梱している。文言を変えたら assets/README.md の手順で作り直す */
+  const [icon, geist, noto] = await Promise.all([
     readFile(join(process.cwd(), "public/icon.png")),
-    readFile(join(process.cwd(), "assets/DelaGothicOne-subset.ttf")),
+    readFile(join(process.cwd(), "assets/Geist-SemiBold-subset.woff")),
+    readFile(join(process.cwd(), "assets/NotoSansJP-SemiBold-subset.woff")),
   ]);
   const iconSrc = `data:image/png;base64,${icon.toString("base64")}`;
 
@@ -38,11 +38,10 @@ export default async function OgImage({
     <div
       style={{
         alignItems: "center",
-        /* 地をアイコンと同じ色にすると、アイコンの輪郭が溶けて消える。
-           濃い地に、アイコンの藍と目の琥珀を光として置く */
-        background: NIGHT,
+        background: BG,
+        /* アイコンの後ろに、サイトの見出しと同じ琥珀の光の輪を置く */
         backgroundImage:
-          "radial-gradient(55% 70% at 12% 20%, rgba(59,76,202,0.55) 0%, rgba(11,15,46,0) 62%), radial-gradient(60% 70% at 95% 95%, rgba(255,178,62,0.30) 0%, rgba(11,15,46,0) 60%)",
+          "radial-gradient(28% 50% at 30% 50%, rgba(255,178,62,0.28) 0%, rgba(250,250,250,0) 100%)",
         display: "flex",
         gap: 56,
         height: "100%",
@@ -51,17 +50,22 @@ export default async function OgImage({
       }}
     >
       {/* biome-ignore lint/performance/noImgElement: next/image is not available in ImageResponse */}
-      <img alt="" height={250} src={iconSrc} width={250} />
+      <img alt="" height={240} src={iconSrc} width={240} />
       <div style={{ display: "flex", flexDirection: "column" }}>
-        <div style={{ color: WHITE, fontSize: 118 }}>Owler</div>
-        <div style={{ color: AMBER, display: "flex", fontSize: 34, marginTop: 14 }}>
-          {isJa ? "定期実行を、エディタで見張る。" : "Your scheduled jobs, watched."}
+        <div style={{ color: INK, fontSize: 120, letterSpacing: -5 }}>Owler</div>
+        <div style={{ color: MUTED, display: "flex", fontSize: 36, marginTop: 8 }}>
+          {isJa
+            ? "定期実行を、エディタで見張る。"
+            : "Your scheduled jobs, watched from the editor."}
         </div>
       </div>
     </div>,
     {
       ...size,
-      fonts: [{ data: font, name: "Dela Gothic One", style: "normal", weight: 400 }],
+      fonts: [
+        { data: geist, name: "Geist", style: "normal", weight: 600 },
+        { data: noto, name: "Noto Sans JP", style: "normal", weight: 600 },
+      ],
     },
   );
 }
