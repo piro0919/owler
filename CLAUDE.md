@@ -67,6 +67,9 @@ plist には、登録したときの Owler の実行ファイルのパスが入�
 「プライバシーとセキュリティ」の「このまま開く」を押すまで、窓の起動もコマンドとしての起動も止められる。
 コマンドは終了コード 137（SIGKILL）で何も出さずに終わり、`/usr/bin/log` には AppleSystemPolicy の
 「Security policy would not allow process」が残る。押したあとは launchd からの起動も通る（実測）。
+手元の版を上げるときは Homebrew で入れ直さず、Owler 自身の更新（Sparkle）で上げる。Homebrew で入れ直すと印
+（com.apple.quarantine）が付き直し、押し直すまでジョブが黙って止まる恐れがある。Sparkle で上げた版には付かない
+（0.1.1 → 0.1.2 で実測）。
 
 ## リリース
 
