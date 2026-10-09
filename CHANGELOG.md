@@ -3,7 +3,7 @@
 ## [0.1.2]
 
 - The menu bar shows a spinning ring and a count while jobs are running, the same way Hawky shows working sessions. It stops when nothing is running, and stays still when Reduce Motion is on
-- Jobs whose last run failed are now counted next to a "!" mark. When both are present, they are stacked in two rows
+- Jobs whose last run failed are now counted next to a "!" mark. When both are present, they are stacked in two rows, with the running row drawn darker so the ring stays readable at menu bar size
 
 ## [0.1.1]
 

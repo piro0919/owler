@@ -21,8 +21,11 @@ enum StatusTitle {
 
     /// 実行中の濃さ。手を出す必要は無いので、失敗より薄くする
     private static let runningAlpha: CGFloat = 0.55
+    /// 2段のときの実行中の濃さ。下の段は字も輪も小さく、0.55 だと等倍のメニューバーで輪に見えなかった（実測）
+    private static let stackedRunningAlpha: CGFloat = 0.85
     /// 輪の溝の濃さ。回る弧が無いところも、輪の形が分かる程度に残す
     nonisolated private static let trackAlpha: CGFloat = 0.18
+    nonisolated private static let stackedTrackAlpha: CGFloat = 0.3
     /// 印と数字の間
     private static let gap: CGFloat = 3
 
@@ -30,11 +33,16 @@ enum StatusTitle {
     static func image(icon: NSImage?, failed: Int, running: Int, phase: CGFloat) -> NSImage {
         let stacked = failed > 0 && running > 0
         let font = stacked ? stackedFont : singleFont
-        let line: CGFloat = stacked ? 1.6 : 2
+        // 2段でも輪の線は細くしない。細くすると等倍で「o」に見えた
+        let line: CGFloat = 2
         let rows = [
-            failed > 0 ? Row(mark: .alert, count: failed, alpha: 1, font: font, line: line) : nil,
+            // 「!」は2段では細いままにする。輪に合わせて太くすると、縦棒が潰れて「:」に見えた（実測）
+            failed > 0 ? Row(mark: .alert, count: failed, alpha: 1, font: font, line: stacked ? 1.6 : 2) : nil,
             running > 0
-                ? Row(mark: .spinner(phase: phase), count: running, alpha: runningAlpha, font: font, line: line)
+                ? Row(
+                    mark: .spinner(phase: phase), count: running,
+                    alpha: stacked ? stackedRunningAlpha : runningAlpha, font: font, line: line,
+                    track: stacked ? stackedTrackAlpha : trackAlpha)
                 : nil,
         ].compactMap { $0 }
 
@@ -78,9 +86,11 @@ enum StatusTitle {
         let mark: Mark
         let alpha: CGFloat
         let line: CGFloat
+        let track: CGFloat
         private let text: CTLine
 
-        init(mark: Mark, count: Int, alpha: CGFloat, font: NSFont, line: CGFloat) {
+        init(mark: Mark, count: Int, alpha: CGFloat, font: NSFont, line: CGFloat, track: CGFloat = 0) {
+            self.track = track
             self.mark = mark
             self.alpha = alpha
             self.line = line
@@ -122,7 +132,7 @@ enum StatusTitle {
                 let ring = NSBezierPath()
                 ring.appendArc(withCenter: center, radius: radius, startAngle: 0, endAngle: 360)
                 ring.lineWidth = line
-                NSColor.black.withAlphaComponent(trackAlpha).setStroke()
+                NSColor.black.withAlphaComponent(track).setStroke()
                 ring.stroke()
 
                 let start = 90 - 360 * phase
