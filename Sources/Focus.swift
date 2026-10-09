@@ -18,6 +18,11 @@ enum Focus {
 
     /// フォルダの窓が前面に来るまで待つ。来なければ前に出す。来たら true
     static func bringForward(bundleID: String, folder: String) async -> Bool {
+        // 許可が無いと窓を確かめられず、上限の10秒まで待ってしまう。窓が開くぶんだけ待って渡す
+        guard AXIsProcessTrusted() else {
+            try? await Task.sleep(for: .milliseconds(1500))
+            return false
+        }
         let name = URL(fileURLWithPath: folder).lastPathComponent
         for _ in 0..<attempts {
             if let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first {
