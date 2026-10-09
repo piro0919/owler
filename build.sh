@@ -67,7 +67,7 @@ swiftc \
   -Xlinker -rpath -Xlinker @executable_path/../Frameworks \
   -o "$APP/Contents/MacOS/Owler" \
   Sources/Paths.swift Sources/Job.swift Sources/Run.swift Sources/Format.swift Sources/Editor.swift Sources/Focus.swift Sources/Strings.swift \
-  Sources/CLI.swift Sources/MainWindow.swift Sources/MenuBar.swift Sources/SettingsWindow.swift Sources/Updater.swift \
+  Sources/CLI.swift Sources/MainWindow.swift Sources/MenuBar.swift Sources/StatusTitle.swift Sources/SettingsWindow.swift Sources/Updater.swift \
   Sources/SelfTest.swift Sources/main.swift
 
 # アイコンは Tools/make-icon.py で書き出したもの

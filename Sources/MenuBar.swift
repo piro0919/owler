@@ -1,5 +1,9 @@
 import AppKit
 
+extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
+}
+
 extension Notification.Name {
     static let menuBarSettingChanged = Notification.Name("owler.menuBarSettingChanged")
 }
@@ -19,11 +23,16 @@ enum Preferences {
 }
 
 /// メニューバーの入口。各ジョブの前回の成否だけを並べ、押すと窓でそのジョブを開く。
-/// 前回が失敗のジョブがあれば、アイコンの横にその数を出す
+/// アイコンの横には、前回が失敗のジョブの数と、実行中のジョブの数を印つきで出す（StatusTitle）
 @MainActor
 final class MenuBar: NSObject, NSMenuDelegate {
     private var item: NSStatusItem?
     private var timer: Timer?
+    /// 実行中の輪を回す。実行中が無いときと「視差効果を減らす」のときは止める
+    private var animation: Timer?
+    private var phase: CGFloat = 0.5
+    private var failed = 0
+    private var running = 0
     private let open: (String?) -> Void
     private let openSettings: () -> Void
 
@@ -42,12 +51,15 @@ final class MenuBar: NSObject, NSMenuDelegate {
             item.menu?.delegate = self
             self.item = item
             refresh()
-            timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            // 実行の始まりに気付くのが遅れないよう、窓と同じ3秒ごとに読み直す
+            timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.refresh() }
             }
         } else {
             timer?.invalidate()
             timer = nil
+            animation?.invalidate()
+            animation = nil
             if let item { NSStatusBar.system.removeStatusItem(item) }
             item = nil
         }
@@ -58,12 +70,46 @@ final class MenuBar: NSObject, NSMenuDelegate {
     }
 
     private func refresh() {
+        guard item != nil else { return }
+        let states = lastRuns().compactMap { $0.1?.state }
+        failed = states.filter { [.failed, .interrupted].contains($0) }.count
+        running = states.filter { $0 == .running }.count
+        draw()
+        animate()
+    }
+
+    private func draw() {
         guard let button = item?.button else { return }
-        let failures = lastRuns().filter { [.failed, .interrupted].contains($0.1?.state) }.count
-        button.image = Self.statusIcon
-        button.imagePosition = .imageLeading
-        button.title = failures > 0 ? " \(failures)" : ""
-        button.toolTip = failures > 0 ? Strings.failedJobs(failures) : "Owler"
+        button.title = ""
+        button.image =
+            failed + running > 0
+            ? StatusTitle.image(icon: Self.statusIcon, failed: failed, running: running, phase: phase)
+            : Self.statusIcon
+        button.toolTip =
+            [
+                failed > 0 ? Strings.failedJobs(failed) : nil, running > 0 ? Strings.runningJobs(running) : nil,
+            ].compactMap { $0 }.joined(separator: "\n").nilIfEmpty ?? "Owler"
+    }
+
+    /// 輪は 15 fps で描き直す。Hawky と同じ速さで、0.8 秒で一周する
+    private func animate() {
+        let moves = running > 0 && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        guard moves != (animation != nil) else { return }
+        guard moves else {
+            animation?.invalidate()
+            animation = nil
+            phase = 0.5
+            draw()
+            return
+        }
+        let interval = 1.0 / 15
+        animation = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.phase = (self.phase + CGFloat(interval / 0.8)).truncatingRemainder(dividingBy: 1)
+                self.draw()
+            }
+        }
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {

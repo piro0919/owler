@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.2]
+
+- The menu bar shows a spinning ring and a count while jobs are running, the same way Hawky shows working sessions. It stops when nothing is running, and stays still when Reduce Motion is on
+- Jobs whose last run failed are now counted next to a "!" mark. When both are present, they are stacked in two rows
+
 ## [0.1.1]
 
 - Jobs no longer inherit Owler's permissions. Once Owler had been granted Accessibility (or any other privacy permission), a job's commands could use it too, for example to control other apps. They now run with only the permissions they would have on launchd by themselves

@@ -81,6 +81,7 @@ enum Strings {
     static var launchFailed: String { t("ログイン時の起動を切り替えられませんでした", "Could not change Launch at Login") }
     static var checkForUpdates: String { t("アップデートを確認", "Check for Updates") }
     static var showInMenuBar: String { t("メニューバーに表示", "Show in Menu Bar") }
+    static func runningJobs(_ n: Int) -> String { t("実行中の定期実行 \(n) 件", "\(n) job(s) running") }
     static func failedJobs(_ n: Int) -> String { t("前回が失敗の定期実行 \(n) 件", "\(n) job(s) failed last time") }
     static func stateText(_ run: RunRecord) -> String {
         switch run.state {
