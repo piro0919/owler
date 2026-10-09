@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.3]
+
+- When the menu bar item is shown, closing every window now removes Owler from the Dock. It comes back to the Dock when a window is opened again
+
 ## [0.1.2]
 
 - The menu bar shows a spinning ring and a count while jobs are running, the same way Hawky shows working sessions. It stops when nothing is running, and stays still when Reduce Motion is on
