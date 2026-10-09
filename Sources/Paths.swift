@@ -4,10 +4,16 @@ import Foundation
 enum Paths {
     static let home = FileManager.default.homeDirectoryForCurrentUser
 
-    /// ジョブの定義と実行の記録の置き場。OWLER_SUPPORT_DIR で差し替えられる（LP の写真を見本のジョブで撮るため）
-    static let support =
-        ProcessInfo.processInfo.environment["OWLER_SUPPORT_DIR"].map { URL(fileURLWithPath: $0) }
-        ?? home.appendingPathComponent("Library/Application Support/Owler")
+    /// 見本のジョブの置き場。LP の写真を撮るときに窓だけを差し替える。空や相対パスは無視する
+    static let previewSupport: URL? = {
+        guard let path = ProcessInfo.processInfo.environment["OWLER_SUPPORT_DIR"], path.hasPrefix("/") else {
+            return nil
+        }
+        return URL(fileURLWithPath: path)
+    }()
+
+    /// ジョブの定義と実行の記録の置き場
+    static let support = previewSupport ?? home.appendingPathComponent("Library/Application Support/Owler")
     static let jobsDir = support.appendingPathComponent("jobs")
     static let runsDir = support.appendingPathComponent("runs")
     /// 取り込んだ元の plist の控え

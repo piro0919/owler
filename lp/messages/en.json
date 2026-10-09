@@ -79,7 +79,7 @@
   "privacy": {
     "title": "Privacy Policy",
     "updated": "Last updated: October 9, 2026",
-    "intro": "Owler runs the jobs you register on launchd and shows their records. That is all it does. There is no server, no analytics and no account.",
+    "intro": "Owler runs the jobs you register on launchd and shows their records. That is all it does. The app has no server, no analytics and no account.",
     "sections": [
       {
         "title": "What it reads and writes",
@@ -96,6 +96,10 @@
       {
         "title": "No analytics",
         "body": "There are no crash reports, no usage tracking, no device IDs and no third-party SDKs in the app."
+      },
+      {
+        "title": "About this website",
+        "body": "owler.kkweb.io, including this page, counts page views with Vercel Web Analytics. It uses no cookies and collects nothing that identifies you. What this page says about collecting nothing is about the app, not about these page view counts."
       },
       {
         "title": "You can check all of this",

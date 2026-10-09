@@ -33,6 +33,11 @@ enum CLI {
 
     static func main(_ args: [String]) -> Int32 {
         guard let command = args.first else { return fail(usage) }
+        // 見本の置き場は窓に見せるためだけのもの。launchd の登録は置き場と関係なく本物に入るので、触らせない
+        if Paths.previewSupport != nil, ["add", "import", "remove", "start", "run"].contains(command) {
+            return fail(
+                "OWLER_SUPPORT_DIR is set. It only previews jobs in the window; unset it to change launchd jobs")
+        }
         let rest = Array(args.dropFirst())
         switch command {
         case "add": return add(rest)

@@ -39,10 +39,11 @@ function SecondaryButton({ children, href }: { children: ReactNode; href: string
 
 /// 改行の位置を文言の側で決めた見出し。ブラウザ任せにすると「見／張る」のように語の途中で割れる。
 /// 狭い画面では1行に収まらないので、固定せずに流す（固定すると「keeps／watch」と細切れになる）
-function Lines({ lines }: { lines: string[] }) {
+/// 行のあいだの空白は英語だけ。日本語は「は、」のあとに空白を入れない
+function Lines({ lines, spaced }: { lines: string[]; spaced: boolean }) {
   return lines.map((line, index) => (
     <span className="sm:block" key={line}>
-      {index > 0 && <span className="sm:hidden"> </span>}
+      {spaced && index > 0 && <span className="sm:hidden"> </span>}
       {line}
     </span>
   ));
@@ -92,10 +93,10 @@ export default async function Page({ params }: PageProps) {
       <section className="grid items-center gap-12 py-16 lg:grid-cols-[1fr_1.1fr] lg:py-24">
         <div className="flex flex-col gap-7">
           <h1 className="display text-5xl sm:text-6xl">
-            <Lines lines={tagline} />
+            <Lines lines={tagline} spaced={locale !== "ja"} />
           </h1>
           <p className="text-[19px] text-muted leading-relaxed">
-            <Lines lines={lead} />
+            <Lines lines={lead} spaced={locale !== "ja"} />
           </p>
           <div className="flex flex-wrap gap-3">
             <PrimaryButton href={DOWNLOAD}>{t("hero.download")}</PrimaryButton>
@@ -112,7 +113,15 @@ export default async function Page({ params }: PageProps) {
           <p className="text-muted text-xs">{t("hero.requirement")}</p>
         </div>
         <div className="overflow-hidden rounded-2xl border border-line shadow-[0_30px_60px_-30px_rgba(0,0,0,0.35)]">
-          <Image alt="" className="w-full" height={1024} priority src="/hero.png" width={1536} />
+          <Image
+            alt=""
+            className="w-full"
+            height={1024}
+            priority
+            sizes="(min-width: 1024px) 50vw, 100vw"
+            src="/hero.png"
+            width={1536}
+          />
         </div>
       </section>
 
@@ -123,7 +132,14 @@ export default async function Page({ params }: PageProps) {
         </h2>
         <div className="grid items-start gap-12 lg:grid-cols-[1.6fr_1fr]">
           <div className="overflow-hidden rounded-xl border border-line bg-card p-2 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-            <Image alt="" className="w-full rounded-lg" height={1200} src={shot} width={1920} />
+            <Image
+              alt=""
+              className="w-full rounded-lg"
+              height={1200}
+              sizes="(min-width: 1024px) 60vw, 100vw"
+              src={shot}
+              width={1920}
+            />
           </div>
           <div className="flex flex-col gap-8 lg:pt-4">
             {/* 黒と灰色の2段。1つの段落に続けて流すと、灰色の頭が語の途中で折り返される */}

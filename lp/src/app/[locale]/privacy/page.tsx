@@ -20,6 +20,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       canonical: localePath(locale, "/privacy"),
       languages: languageAlternates("/privacy"),
     },
+    // 書かないと親のものを引き継ぎ、共有したときにトップページの題名と URL が出る
+    openGraph: { title: t("title"), description: t("intro"), url: localePath(locale, "/privacy") },
+    twitter: { title: t("title"), description: t("intro") },
   };
 }
 
