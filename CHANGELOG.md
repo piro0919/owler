@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.4]
+
+- The update window now follows the Mac's language, so it appears in Japanese on a Japanese Mac. It was always in English before. The release notes themselves are still in English
+
 ## [0.1.3]
 
 - When the menu bar item is shown, closing every window now removes Owler from the Dock. It comes back to the Dock when a window is opened again
