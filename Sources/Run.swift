@@ -97,7 +97,7 @@ enum Runner {
         try? RunStore.save(record, for: id)
 
         fm.createFile(atPath: RunStore.log(id, record.stamp).path, contents: nil)
-        let outputs = [RunStore.log(id, record.stamp).path, job.alsoLogTo.map(Paths.expand)]
+        let handles = [RunStore.log(id, record.stamp).path, job.alsoLogTo.map(Paths.expand)]
             .compactMap { $0 }
             .compactMap { path -> FileHandle? in
                 if !fm.fileExists(atPath: path) { fm.createFile(atPath: path, contents: nil) }
@@ -105,6 +105,7 @@ enum Runner {
                 _ = try? handle?.seekToEnd()
                 return handle
             }
+        let outputs = Sink(handles)
 
         var environment = ProcessInfo.processInfo.environment
         if let extra = job.environment { environment.merge(extra) { _, new in new } }
@@ -117,7 +118,7 @@ enum Runner {
                 done.signal()
                 return
             }
-            for output in outputs { output.write(data) }
+            outputs.write(data)
         }
 
         let status: Int32
@@ -135,10 +136,10 @@ enum Runner {
             }
         } catch {
             pipe.fileHandleForReading.readabilityHandler = nil
-            for output in outputs { output.write(Data("Owler: \(error)\n".utf8)) }
+            outputs.write(Data("Owler: \(error)\n".utf8))
             status = 127
         }
-        for output in outputs { try? output.close() }
+        outputs.close()
 
         record.end = Date()
         record.exitCode = status
@@ -146,6 +147,28 @@ enum Runner {
         try? RunStore.save(record, for: id)
         RunStore.prune(id)
         return status
+    }
+}
+
+/// 実行の出力の書き先。読み取りは別の列で走るので、時間切れで読むのをやめたあとも書き込みの最中のことがある。
+/// 書き込みと閉じる処理を錠で順番にし、閉じたあとの書き込みは捨てる（閉じた先に書くと落ちる）
+final class Sink: @unchecked Sendable {
+    private let lock = NSLock()
+    private var handles: [FileHandle]
+
+    init(_ handles: [FileHandle]) { self.handles = handles }
+
+    func write(_ data: Data) {
+        lock.lock()
+        defer { lock.unlock() }
+        for handle in handles { try? handle.write(contentsOf: data) }
+    }
+
+    func close() {
+        lock.lock()
+        defer { lock.unlock() }
+        for handle in handles { try? handle.close() }
+        handles = []
     }
 }
 
@@ -174,22 +197,37 @@ enum Spawn {
         executable: String, arguments: [String], folder: String, environment: [String: String], output: Int32
     ) throws -> pid_t {
         guard let disclaim else { throw Failure(description: "cannot detach the job from Owler's permissions") }
-        var attributes: posix_spawnattr_t?
-        posix_spawnattr_init(&attributes)
-        defer { posix_spawnattr_destroy(&attributes) }
-        // 下で渡した 0〜2 番以外のファイルを子に持ち込ませない
-        posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_CLOEXEC_DEFAULT))
-        guard disclaim(&attributes, 1) == 0 else {
-            throw Failure(description: "cannot detach the job from Owler's permissions")
+        // フォルダが無いと posix_spawn は ENOENT を返し、コマンドが無いのと見分けが付かない。先に確かめる
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: folder, isDirectory: &isDirectory), isDirectory.boolValue else {
+            throw Failure(description: "the job's folder does not exist: \(folder)")
+        }
+        func check(_ result: Int32, _ step: String) throws {
+            if result != 0 { throw Failure(description: "\(step): \(String(cString: strerror(result)))") }
         }
 
+        var attributes: posix_spawnattr_t?
+        try check(posix_spawnattr_init(&attributes), "posix_spawnattr_init")
+        defer { posix_spawnattr_destroy(&attributes) }
+        // 下で渡した 0〜2 番以外のファイルを子に持ち込ませない。シグナルの止め方と扱いは初期の状態に戻す
+        // （Process も戻していた。戻さないと、Owler の側で無視しているシグナルを子も無視する）
+        var noSignals = sigset_t()
+        var allSignals = sigset_t()
+        sigemptyset(&noSignals)
+        sigfillset(&allSignals)
+        try check(posix_spawnattr_setsigmask(&attributes, &noSignals), "posix_spawnattr_setsigmask")
+        try check(posix_spawnattr_setsigdefault(&attributes, &allSignals), "posix_spawnattr_setsigdefault")
+        let flags = POSIX_SPAWN_CLOEXEC_DEFAULT | POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF
+        try check(posix_spawnattr_setflags(&attributes, Int16(flags)), "posix_spawnattr_setflags")
+        try check(disclaim(&attributes, 1), "cannot detach the job from Owler's permissions")
+
         var actions: posix_spawn_file_actions_t?
-        posix_spawn_file_actions_init(&actions)
+        try check(posix_spawn_file_actions_init(&actions), "posix_spawn_file_actions_init")
         defer { posix_spawn_file_actions_destroy(&actions) }
-        posix_spawn_file_actions_addopen(&actions, 0, "/dev/null", O_RDONLY, 0)
-        posix_spawn_file_actions_adddup2(&actions, output, 1)
-        posix_spawn_file_actions_adddup2(&actions, output, 2)
-        posix_spawn_file_actions_addchdir_np(&actions, folder)
+        try check(posix_spawn_file_actions_addopen(&actions, 0, "/dev/null", O_RDONLY, 0), "stdin")
+        try check(posix_spawn_file_actions_adddup2(&actions, output, 1), "stdout")
+        try check(posix_spawn_file_actions_adddup2(&actions, output, 2), "stderr")
+        try check(posix_spawn_file_actions_addchdir_np(&actions, folder), "chdir")
 
         let argv = ([executable] + arguments).map { strdup($0) } + [nil]
         let envp = environment.map { strdup("\($0.key)=\($0.value)") } + [nil]
@@ -204,9 +242,12 @@ enum Spawn {
     }
 
     /// 終わるのを待って終了コードを返す。シグナルで止まったら 128 + シグナル番号（シェルと同じ）
+    /// 待つこと自体に失敗したら、結果が分からないので成功とは記録しない
     static func wait(_ pid: pid_t) -> Int32 {
         var status: Int32 = 0
-        while waitpid(pid, &status, 0) == -1 && errno == EINTR {}
+        while waitpid(pid, &status, 0) == -1 {
+            if errno != EINTR { return 1 }
+        }
         return exitCode(fromWaitStatus: status)
     }
 
