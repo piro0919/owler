@@ -18,6 +18,8 @@ Claude Code's desktop app has scheduled tasks of its own. Owler is for people
 who would rather stay in Cursor or VS Code. Jobs run on launchd, so they fire
 whether Owler is open or not.
 
+There is a page for it at [owler.kkweb.io](https://owler.kkweb.io).
+
 macOS 14+. No Xcode needed: `./build.sh` compiles with the Swift that ships with
 the Command Line Tools.
 
