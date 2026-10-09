@@ -54,9 +54,7 @@ export default async function OgImage({
       <div style={{ display: "flex", flexDirection: "column" }}>
         <div style={{ color: INK, fontSize: 120, letterSpacing: -5 }}>Owler</div>
         <div style={{ color: MUTED, display: "flex", fontSize: 36, marginTop: 8 }}>
-          {isJa
-            ? "定期実行を、エディタで見張る。"
-            : "Your scheduled jobs, watched from the editor."}
+          {isJa ? "定期実行を、夜通し見張る。" : "Keeps watch over your scheduled jobs."}
         </div>
       </div>
     </div>,

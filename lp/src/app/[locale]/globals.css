@@ -43,13 +43,3 @@ body {
   letter-spacing: -0.045em;
   line-height: 1.05;
 }
-
-/* アイコンの後ろの光の輪。手本の三角形の後ろにあるものと同じ扱い */
-.halo {
-  background: radial-gradient(
-    closest-side,
-    color-mix(in srgb, var(--color-amber) 22%, transparent) 0%,
-    color-mix(in srgb, var(--color-ink) 4%, transparent) 55%,
-    transparent 100%
-  );
-}

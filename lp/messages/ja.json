@@ -1,68 +1,75 @@
 {
   "meta": {
-    "title": "Owler — 定期実行を、エディタで見張る",
-    "description": "launchd で回している定期実行を一覧にして、各回の結果を残す Mac アプリ。気になる回は、Cursor や VS Code の Claude Code でそのまま調べられます。"
+    "title": "Owler — 定期実行を見張る Mac アプリ",
+    "description": "launchd で動かしている定期実行を一覧にして、実行のたびに結果を記録する Mac アプリ。気になる実行は、Cursor や VS Code の Claude Code でそのまま調べられます。"
   },
   "hero": {
-    "tagline": "定期実行を、エディタで見張る。",
+    "tagline": [
+      "定期実行は、",
+      "Owler が見張る。"
+    ],
+    "lead": [
+      "作るのも、結果を調べるのも、",
+      "Cursor や VS Code の Claude Code で。"
+    ],
     "points": [
-      "launchd で動く",
-      "全部の回を残す",
-      "Claude Code で開く"
+      "launchd で実行",
+      "実行履歴をすべて保存",
+      "Cursor・VS Code で作成と調査"
     ],
     "download": "無料でダウンロード",
     "requirement": "macOS 14 以降・Apple シリコン"
   },
   "product": {
-    "title": "夜に動いた回を、朝に開く。",
-    "statement": "毎朝の claude -p も、夕方の取り込みも、回ごとに結果が残ります。",
-    "statementMuted": "気になる回は、そのままエディタの Claude Code で調べられます。",
-    "label": "できること",
+    "title": "昨夜の結果は、朝いちばんに。",
+    "statement": "AI に任せた毎朝の作業も、夜のバックアップも、実行のたびに結果を記録します。",
+    "statementMuted": "気になる実行は、Cursor や VS Code の Claude Code でそのまま調べられます。",
+    "label": "主な機能",
     "items": [
       {
-        "title": "回ごとの記録",
-        "body": "開始と終了、終了コード、出力を、実行のたびに残します。"
+        "title": "実行履歴",
+        "body": "開始・終了時刻、終了コード、出力を実行ごとに記録します。"
       },
       {
-        "title": "claude -p の報告",
-        "body": "ジョブの中で claude -p が動いた回は、最後の報告を回のページに出します。"
+        "title": "AI の報告を表示",
+        "body": "ジョブの中で Claude Code を動かした場合は、その最後の報告を表示します。"
       },
       {
-        "title": "Cursor と VS Code",
-        "body": "そのジョブのフォルダの窓を前に出して、Claude Code の会話を開きます。"
+        "title": "Cursor・VS Code に対応",
+        "body": "ジョブのフォルダをエディタで開いて、Claude Code の会話を始めます。"
       },
       {
-        "title": "足すのも Claude と",
-        "body": "何をいつ動かすかを相談し、決まったら Claude が登録します。"
+        "title": "作るのも AI と",
+        "body": "何をいつ動かすかを Claude Code に相談すれば、登録まで済ませます。"
       },
       {
-        "title": "メニューバー",
-        "body": "ジョブごとの前回の結果を並べ、失敗があれば数を出します。"
+        "title": "メニューバー表示",
+        "body": "各ジョブの直近の結果と、失敗の件数を表示します。"
       }
     ]
   },
   "install": {
-    "title": "入れて、相談して、任せる。",
+    "title": "3ステップで始める。",
     "steps": [
       {
-        "title": "入れる",
-        "body": "DMG をダウンロードして、アプリケーションへドラッグします。Homebrew でも入れられます。"
+        "title": "インストール",
+        "body": "DMG をダウンロードして、アプリケーションフォルダへドラッグします。Homebrew にも対応しています。"
       },
       {
-        "title": "開けるようにする",
-        "body": "作者が Apple の登録開発者ではないため、初回の起動は止められます。システム設定の「プライバシーとセキュリティ」で「このまま開く」を押します。"
+        "title": "初回の起動",
+        "body": "Apple の公証を受けていないため、初回は起動が止められます。システム設定の「プライバシーとセキュリティ」で「このまま開く」を押してください。"
       },
       {
-        "title": "定期実行を足す",
-        "body": "窓の左下の「新しい定期実行」を押して、Claude Code と相談します。"
+        "title": "定期実行を追加",
+        "body": "ウインドウ左下の「新しい定期実行」から、Claude Code に相談します。"
       }
     ],
-    "accessibility": "アクセシビリティの許可を求められたら、許可してください。エディタの窓を前に出すのに使います。",
+    "accessibility": "初回にアクセシビリティの許可を求められます。エディタのウインドウを前面に出すために使います。",
     "cta": "無料でダウンロード"
   },
   "footer": {
     "source": "ソースコード",
-    "releases": "これまでの更新",
+    "releases": "リリースノート",
     "privacy": "プライバシー"
   },
   "language": {
@@ -76,7 +83,7 @@
     "sections": [
       {
         "title": "読み書きするもの",
-        "body": "ジョブの定義と、回ごとの記録と出力を ~/Library/Application Support/Owler に置き、launchd に渡す設定を ~/Library/LaunchAgents に置きます。ジョブの中で claude -p が動いた回は、そのフォルダの Claude Code の会話記録を探し、最後の発言を読みます。エディタの窓を探すために、Cursor と VS Code の窓の題名を読みます。"
+        "body": "ジョブの定義と、実行ごとの記録と出力を ~/Library/Application Support/Owler に置き、launchd に渡す設定を ~/Library/LaunchAgents に置きます。ジョブの中で claude -p が動いた実行は、そのフォルダの Claude Code の会話記録を探し、最後の発言を読みます。エディタのウインドウを探すために、Cursor と VS Code のウインドウのタイトルを読みます。"
       },
       {
         "title": "Mac の外には出ない",

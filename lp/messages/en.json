@@ -1,68 +1,75 @@
 {
   "meta": {
-    "title": "Owler — your scheduled jobs, watched from the editor",
-    "description": "A Mac app that lists the jobs you run on launchd and keeps the result of every run. Open any run in Claude Code inside Cursor or VS Code."
+    "title": "Owler — keeps watch over your scheduled jobs",
+    "description": "A Mac app that lists the jobs you run on launchd and records the result of every run. Investigate any run with Claude Code in Cursor or VS Code."
   },
   "hero": {
-    "tagline": "Your scheduled jobs, watched from the editor.",
+    "tagline": [
+      "Owler keeps watch",
+      "over your scheduled jobs."
+    ],
+    "lead": [
+      "Set them up and dig into the results",
+      "with Claude Code in Cursor or VS Code."
+    ],
     "points": [
       "Runs on launchd",
       "Keeps every run",
-      "Opens in Claude Code"
+      "Set up and investigate in Cursor or VS Code"
     ],
     "download": "Download for free",
     "requirement": "macOS 14 or later · Apple silicon"
   },
   "product": {
-    "title": "Open last night's run in the morning.",
-    "statement": "A claude -p every morning, an import every evening. Every run is kept.",
-    "statementMuted": "Dig into any of them with Claude Code, right in your editor.",
-    "label": "What it does",
+    "title": "See last night's runs first thing in the morning.",
+    "statement": "Morning tasks handed to AI, nightly backups: every run is recorded.",
+    "statementMuted": "Investigate any of them with Claude Code in Cursor or VS Code.",
+    "label": "Features",
     "items": [
       {
-        "title": "A record of every run",
-        "body": "Start, end, exit code and output, every time."
+        "title": "Run history",
+        "body": "Start and end times, exit code and output, recorded for every run."
       },
       {
-        "title": "claude -p's report",
-        "body": "When a job runs claude -p, its last message shows on the run's page."
+        "title": "AI reports",
+        "body": "When a job runs Claude Code, its last message is shown with the run."
       },
       {
         "title": "Cursor and VS Code",
-        "body": "Brings the job's folder to the front and opens a Claude Code conversation there."
+        "body": "Opens the job's folder in your editor and starts a Claude Code conversation there."
       },
       {
-        "title": "Set jobs up with Claude",
-        "body": "Decide what to run and when, and Claude registers it."
+        "title": "Set up with AI",
+        "body": "Tell Claude Code what to run and when, and it registers the job."
       },
       {
         "title": "Menu bar",
-        "body": "The last result of each job, with a count of failures."
+        "body": "The latest result of each job, with a count of failures."
       }
     ]
   },
   "install": {
-    "title": "Install, talk it through, let it run.",
+    "title": "Get started in three steps.",
     "steps": [
       {
         "title": "Install",
-        "body": "Download the DMG and drag Owler into Applications. Homebrew works too."
+        "body": "Download the DMG and drag Owler into Applications. Homebrew is supported too."
       },
       {
-        "title": "Let it open",
-        "body": "The author is not a registered Apple developer, so the first launch is blocked. Click Open Anyway in System Settings → Privacy & Security."
+        "title": "First launch",
+        "body": "Owler is not notarized by Apple, so the first launch is blocked. Click Open Anyway in System Settings → Privacy & Security."
       },
       {
         "title": "Add a job",
         "body": "Click New Job at the bottom left of the window and talk it through with Claude Code."
       }
     ],
-    "accessibility": "Allow Accessibility access when asked. Owler uses it to bring the editor window to the front.",
+    "accessibility": "Owler asks for Accessibility access on first use. It needs it to bring the editor window to the front.",
     "cta": "Download for free"
   },
   "footer": {
     "source": "Source code",
-    "releases": "Releases",
+    "releases": "Release notes",
     "privacy": "Privacy"
   },
   "language": {

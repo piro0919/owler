@@ -37,6 +37,17 @@ function SecondaryButton({ children, href }: { children: ReactNode; href: string
   );
 }
 
+/// 改行の位置を文言の側で決めた見出し。ブラウザ任せにすると「見／張る」のように語の途中で割れる。
+/// 狭い画面では1行に収まらないので、固定せずに流す（固定すると「keeps／watch」と細切れになる）
+function Lines({ lines }: { lines: string[] }) {
+  return lines.map((line, index) => (
+    <span className="sm:block" key={line}>
+      {index > 0 && <span className="sm:hidden"> </span>}
+      {line}
+    </span>
+  ));
+}
+
 /// ターミナルに貼る1行。横に長いので、狭い画面では中で横に流す
 function Command({ children }: { children: string }) {
   return (
@@ -54,6 +65,8 @@ export default async function Page({ params }: PageProps) {
   setRequestLocale(locale);
 
   const t = await getTranslations();
+  const tagline = t.raw("hero.tagline") as string[];
+  const lead = t.raw("hero.lead") as string[];
   const points = t.raw("hero.points") as string[];
   const items = t.raw("product.items") as Item[];
   const steps = t.raw("install.steps") as Item[];
@@ -75,32 +88,32 @@ export default async function Page({ params }: PageProps) {
         </div>
       </header>
 
-      {/* 見出し。左に大きな見出し、真ん中にアイコン、右に短い3行 */}
-      <section className="grid items-center gap-6 py-16 lg:grid-cols-[1.2fr_1fr_0.8fr] lg:gap-12 lg:py-28">
-        <div className="flex flex-col gap-8">
-          <h1 className="display text-balance text-5xl sm:text-6xl">{t("hero.tagline")}</h1>
+      {/* 見出し。左に見出しと1行とボタン、右に描き起こした絵 */}
+      <section className="grid items-center gap-12 py-16 lg:grid-cols-[1fr_1.1fr] lg:py-24">
+        <div className="flex flex-col gap-7">
+          <h1 className="display text-5xl sm:text-6xl">
+            <Lines lines={tagline} />
+          </h1>
+          <p className="text-[19px] text-muted leading-relaxed">
+            <Lines lines={lead} />
+          </p>
           <div className="flex flex-wrap gap-3">
             <PrimaryButton href={DOWNLOAD}>{t("hero.download")}</PrimaryButton>
             <SecondaryButton href={REPO}>GitHub</SecondaryButton>
           </div>
-          <p className="text-muted text-sm">{t("hero.requirement")}</p>
+          <ul className="flex flex-wrap gap-x-5 gap-y-2 text-muted text-sm">
+            {points.map((point) => (
+              <li className="flex items-center gap-2" key={point}>
+                <span className="h-1.5 w-1.5 rounded-full bg-amber" />
+                {point}
+              </li>
+            ))}
+          </ul>
+          <p className="text-muted text-xs">{t("hero.requirement")}</p>
         </div>
-        {/* 狭い画面では、幅いっぱいの正方形にすると前後が大きく空く。上限を付ける */}
-        <div className="halo mx-auto flex aspect-square w-full max-w-[220px] items-center justify-center lg:max-w-none">
-          <Image
-            alt=""
-            className="w-1/2 drop-shadow-[0_24px_40px_rgba(0,0,0,0.25)]"
-            height={512}
-            priority
-            src="/icon.png"
-            width={512}
-          />
+        <div className="overflow-hidden rounded-2xl border border-line shadow-[0_30px_60px_-30px_rgba(0,0,0,0.35)]">
+          <Image alt="" className="w-full" height={1024} priority src="/hero.png" width={1536} />
         </div>
-        <ul className="flex flex-col gap-2 text-[17px]">
-          {points.map((point) => (
-            <li key={point}>{point}</li>
-          ))}
-        </ul>
       </section>
 
       {/* 何をするアプリか。枠に入れた窓の写真と、項目名だけの短いリスト */}
