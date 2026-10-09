@@ -98,6 +98,7 @@ final class SettingsWindowController: NSWindowController {
         launchCheckbox.state = SMAppService.mainApp.status == .enabled ? .on : .off
         report("")
 
+        Dock.show()
         NSApp.activate()
         showWindow(nil)
         window?.center()

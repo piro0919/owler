@@ -369,6 +369,7 @@ final class MainWindowController {
         }
         model.reload()
         if let job { model.selectedJob = job }
+        Dock.show()
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate()
     }

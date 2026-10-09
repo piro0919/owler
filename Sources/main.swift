@@ -1,6 +1,22 @@
 import AppKit
 
-/// 窓を出す。閉じても Dock から開き直せる
+/// 窓を出しているあいだだけ Dock に出す。メニューバーに居て窓が無いときは Dock から外す
+@MainActor
+enum Dock {
+    /// 窓を出す前に呼ぶ。外したままだと、前に出てもアプリのメニューが出ない
+    static func show() {
+        if NSApp.activationPolicy() != .regular { NSApp.setActivationPolicy(.regular) }
+    }
+
+    /// 窓を閉じたあとに呼ぶ。メニューバーに居なければ、窓を閉じた時点でアプリが終わる
+    static func hideIfIdle() {
+        guard Preferences.showsMenuBar else { return }
+        let hasWindow = NSApp.windows.contains { $0.isVisible && $0.styleMask.contains(.titled) }
+        if !hasWindow { NSApp.setActivationPolicy(.accessory) }
+    }
+}
+
+/// 窓を出す。閉じたら、メニューバーから開き直せる
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let main = MainWindowController()
@@ -27,6 +43,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.settingsWindow.close()
                 self.settingsWindow = SettingsWindowController()
                 if wasVisible { self.settingsWindow.show() }
+            }
+        }
+        // 閉じきるのは willClose のあとなので、一巡待ってから数える
+        NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: nil, queue: .main) {
+            _ in
+            DispatchQueue.main.async { MainActor.assumeIsolated { Dock.hideIfIdle() } }
+        }
+        // 更新の画面のように、こちらの show を通らずに出る窓もある
+        NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) {
+            _ in
+            MainActor.assumeIsolated {
+                if NSApp.keyWindow?.styleMask.contains(.titled) == true { Dock.show() }
             }
         }
         main.show()
