@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.5]
+
+- The menu bar now shows when each job runs next, such as "Next Tomorrow 9:00". Today and tomorrow are written as words, later days as dates
+- A successful last run is no longer written out, since the dot already shows it. Failed, interrupted and running jobs still say so before the next run
+- If a job missed its last scheduled run, for example because the Mac was asleep, the menu shows when it last ran so the gap is easy to spot
+
 ## [0.1.4]
 
 - The update window now follows the Mac's language, so it appears in Japanese on a Japanese Mac. It was always in English before. The release notes themselves are still in English
