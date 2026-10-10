@@ -197,6 +197,9 @@ export default async function Page({ params }: PageProps) {
           <Link className="transition hover:text-ink" href="/privacy">
             {t("footer.privacy")}
           </Link>
+          <a className="transition hover:text-ink" href="https://buymeacoffee.com/piro0919">
+            Buy Me a Coffee
+          </a>
         </div>
       </footer>
     </div>
