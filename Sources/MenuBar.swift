@@ -18,7 +18,7 @@ enum Preferences {
     }
 }
 
-/// メニューバーの入口。各ジョブの前回の成否だけを並べ、押すと窓でそのジョブを開く。
+/// メニューバーの入口。各ジョブの前回の成否と次回を並べ、押すと窓でそのジョブを開く。
 /// アイコンの横には、前回が失敗のジョブの数と、実行中のジョブの数を印つきで出す（StatusTitle）
 @MainActor
 final class MenuBar: NSObject, NSMenuDelegate {
@@ -141,12 +141,12 @@ final class MenuBar: NSObject, NSMenuDelegate {
             item.representedObject = job.id
             item.image = Self.dot(run?.state)
             item.toolTip = job.summary.isEmpty ? nil : job.summary
-            // 2行目に前回の結果を出す。subtitle の無い版では1行に並べる
-            let last = run.map { "\(Format.dateTime($0.start))  \(Strings.stateText($0))" } ?? Strings.noRuns
+            // 2行目に次回を出す。subtitle の無い版では1行に並べる
+            let line = Self.line(job, run)
             if #available(macOS 14.4, *) {
-                item.subtitle = last
+                item.subtitle = line
             } else {
-                item.title = "\(job.displayName)  —  \(last)"
+                item.title = "\(job.displayName)  —  \(line)"
             }
             menu.addItem(item)
         }
@@ -156,6 +156,29 @@ final class MenuBar: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: Strings.quit, action: #selector(NSApp.terminate), keyEquivalent: "q"))
         refresh()
+    }
+
+    /// 各ジョブの2行目。前回の成功は丸の色で分かるので書かず、失敗・中断・実行中だけを言葉で添える。
+    /// ただし直前の予定の回が記録に無いときは、成功でも前回の日時を出す。スリープで飛ばした回などに気付けるように
+    nonisolated static func line(
+        _ job: Job, _ run: RunRecord?, now: Date = Date(), calendar: Calendar = .current
+    ) -> String {
+        var parts: [String] = []
+        if let run {
+            if run.state != .succeeded {
+                parts.append(Strings.stateText(run))
+            } else if let previous = job.previousFire(before: now, calendar: calendar),
+                run.start < previous.addingTimeInterval(-60)
+            {
+                parts.append(Strings.lastRun(Format.near(run.start, now: now, calendar: calendar)))
+            }
+        } else {
+            parts.append(Strings.noRuns)
+        }
+        if let next = job.nextFire(after: now, calendar: calendar) {
+            parts.append(Strings.nextRun(Format.near(next, now: now, calendar: calendar)))
+        }
+        return parts.joined(separator: " · ")
     }
 
     private func action(_ title: String, _ selector: Selector) -> NSMenuItem {

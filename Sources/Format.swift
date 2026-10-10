@@ -6,6 +6,22 @@ enum Format {
         date.formatted(.dateTime.month().day().weekday(.abbreviated).hour().minute().locale(locale))
     }
 
+    /// 近い日時を短く。今日と明日は言葉にし（今日 9:00・Tomorrow 9:00 AM）、それより先は dateTime と同じ
+    static func near(
+        _ date: Date, now: Date = Date(), calendar: Calendar = .current, locale: Locale = Strings.locale
+    ) -> String {
+        let japanese = locale.language.languageCode?.identifier == "ja"
+        let style = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
+        let time = date.formatted(style.hour().minute())
+        let days = calendar.dateComponents(
+            [.day], from: calendar.startOfDay(for: now), to: calendar.startOfDay(for: date))
+        switch days.day {
+        case 0: return japanese ? "今日 \(time)" : "Today \(time)"
+        case 1: return japanese ? "明日 \(time)" : "Tomorrow \(time)"
+        default: return date.formatted(style.month().day().weekday(.abbreviated).hour().minute())
+        }
+    }
+
     /// 時刻だけ。日本語なら 3:33、アメリカの英語なら 3:33 AM
     static func timeOfDay(hour: Int, minute: Int, locale: Locale = Strings.locale) -> String {
         var calendar = Calendar(identifier: .gregorian)

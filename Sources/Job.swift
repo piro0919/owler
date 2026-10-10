@@ -47,14 +47,23 @@ struct Job: Codable, Identifiable, Equatable {
 
     /// 次に動く時刻
     func nextFire(after date: Date = Date(), calendar: Calendar = .current) -> Date? {
+        fires(from: date, direction: .forward, calendar: calendar).min()
+    }
+
+    /// 直前に動くはずだった時刻
+    func previousFire(before date: Date = Date(), calendar: Calendar = .current) -> Date? {
+        fires(from: date, direction: .backward, calendar: calendar).max()
+    }
+
+    private func fires(from date: Date, direction: Calendar.SearchDirection, calendar: Calendar) -> [Date] {
         schedule.compactMap { slot -> Date? in
             var parts = DateComponents()
             parts.hour = slot.hour
             parts.minute = slot.minute
             // launchd の日曜は 0 と 7、Calendar は 1
             if let weekday = slot.weekday { parts.weekday = weekday % 7 + 1 }
-            return calendar.nextDate(after: date, matching: parts, matchingPolicy: .nextTime)
-        }.min()
+            return calendar.nextDate(after: date, matching: parts, matchingPolicy: .nextTime, direction: direction)
+        }
     }
 
     /// いつ動くかの短い説明。時刻と曜日の書き方は地域に従う（アメリカの英語なら 3:33 AM）。

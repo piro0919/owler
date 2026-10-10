@@ -67,6 +67,41 @@ enum SelfTest {
             let next = job.nextFire(after: friday, calendar: calendar)
             let parts = next.map { calendar.dateComponents([.month, .day, .hour], from: $0) }
             check(parts?.month == 10 && parts?.day == 12 && parts?.hour == 10, "launchd の曜日で次を求める")
+            let previous = job.previousFire(before: friday, calendar: calendar)
+            let back = previous.map { calendar.dateComponents([.month, .day, .hour], from: $0) }
+            check(back?.month == 10 && back?.day == 5 && back?.hour == 10, "直前の予定の回を求める")
+        }
+
+        // 近い日時とメニューの2行目
+        do {
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = TimeZone(identifier: "Asia/Tokyo")!
+            let ja = Locale(identifier: "ja_JP")
+            let us = Locale(identifier: "en_US")
+            func at(_ day: Int, _ hour: Int) -> Date {
+                calendar.date(from: DateComponents(year: 2026, month: 10, day: day, hour: hour))!
+            }
+            let now = at(10, 12)
+            check(Format.near(at(10, 15), now: now, calendar: calendar, locale: ja) == "今日 15:00", "今日は言葉にする")
+            check(Format.near(at(11, 9), now: now, calendar: calendar, locale: ja) == "明日 9:00", "明日は言葉にする")
+            check(
+                Format.near(at(11, 9), now: now, calendar: calendar, locale: us).hasPrefix("Tomorrow "),
+                "英語の明日")
+            check(Format.near(at(12, 9), now: now, calendar: calendar, locale: ja).contains("12"), "明後日からは日付")
+
+            let daily = Job(
+                id: "a", summary: "", folder: "/tmp", command: ["/bin/echo"],
+                schedule: [Job.Slot(hour: 9, minute: 0, weekday: nil)], alsoLogTo: nil)
+            func run(_ start: Date, _ code: Int32) -> RunRecord {
+                RunRecord(stamp: "s", start: start, end: start, exitCode: code, session: nil, pid: nil)
+            }
+            let line = { (r: RunRecord?) in MenuBar.line(daily, r, now: now, calendar: calendar) }
+            check(
+                line(run(at(10, 9), 0)) == Strings.nextRun(Format.near(at(11, 9), now: now, calendar: calendar)),
+                "成功なら次回だけ")
+            check(line(run(at(10, 9), 1)).hasPrefix(Strings.failed(1) + " · "), "失敗は言葉で添える")
+            check(line(run(at(8, 9), 0)).hasPrefix(Strings.lastRun("")), "予定の回が無ければ前回を出す")
+            check(line(nil).hasPrefix(Strings.noRuns + " · "), "まだ動いていないことも出す")
         }
 
         // 日時の書き方は地域に従う

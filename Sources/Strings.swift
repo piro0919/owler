@@ -92,6 +92,7 @@ enum Strings {
         }
     }
     static func nextRun(_ when: String) -> String { t("次回 \(when)", "Next \(when)") }
+    static func lastRun(_ when: String) -> String { t("前回 \(when)", "Last \(when)") }
     static func stateName(_ run: RunRecord) -> String {
         switch run.state {
         case .running: running
