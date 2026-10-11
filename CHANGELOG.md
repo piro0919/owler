@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.6]
+
+- Jobs can now ask you to come and read their results. Add a job with `--review`, and after each successful run a dot appears next to the owl in the menu bar
+- The dot stays until you open that run from the menu bar, the window, or Claude Code. It makes no sound and shows no notification
+- In the menu, such a job says "New" before its next run, and its name is shown in bold in the window
+
 ## [0.1.5]
 
 - The menu bar now shows when each job runs next, such as "Next Tomorrow 9:00". Today and tomorrow are written as words, later days as dates
