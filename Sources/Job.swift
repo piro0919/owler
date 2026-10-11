@@ -15,12 +15,21 @@ struct Job: Codable, Identifiable, Equatable {
     var alsoLogTo: String?
     /// 足す環境変数。取り込んだ plist の EnvironmentVariables を引き継ぐ
     var environment: [String: String]?
+    /// 終わった回を利用者に見に来てほしいジョブ。成功した回をまだ開いていなければ、メニューバーに印を出す。
+    /// 裏で動いて成功すれば見なくてよいジョブにまで印を出すと、印の意味が薄れるので、ジョブごとに選ぶ
+    var review: Bool?
 
     /// 動かす時刻。曜日が無ければ毎日。曜日は launchd と同じく 0 と 7 が日曜
     struct Slot: Codable, Equatable, Hashable {
         var hour: Int
         var minute: Int
         var weekday: Int?
+    }
+
+    /// まだ見に来ていない回か。失敗は「!」で数えるので、ここでは成功した回だけを見る
+    func awaitsReview(_ run: RunRecord?) -> Bool {
+        guard review == true, let run else { return false }
+        return run.state == .succeeded && run.seen == nil
     }
 
     /// 画面に出す名前。説明があればそれ、無ければ ID

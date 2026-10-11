@@ -3,6 +3,7 @@ import AppKit
 /// 前回が失敗のジョブか実行中のジョブがあるときのメニューバーの絵。Hawky の StatusTitle を写した。
 /// フクロウの影絵の右に、失敗は「!」の印と数、実行中は回る輪と数を描く。両方あれば上下に積み、失敗を上に置く。
 /// どの場面でも印を付け、数字が自分の意味を名乗るようにする。
+/// まだ見ていない回（Job.review）は数えず、影絵の右上に点を打つだけにする。郵便受けの旗と同じで、来たことだけを示す。
 ///
 /// NSStatusItem の title は1行しか出せないので、影絵ごと1枚の絵として描く。
 /// テンプレート画像にしておけば、メニューバーの明暗に合わせて OS が色を付ける。
@@ -29,8 +30,12 @@ enum StatusTitle {
     /// 印と数字の間
     private static let gap: CGFloat = 3
 
+    /// まだ見ていない回の点の直径と、影絵から切り離すために周りを抜く幅
+    private static let badge: CGFloat = 6
+    private static let badgeMargin: CGFloat = 1.5
+
     /// - Parameter phase: 輪の回る位置。0 から 1 で一周する
-    static func image(icon: NSImage?, failed: Int, running: Int, phase: CGFloat) -> NSImage {
+    static func image(icon: NSImage?, failed: Int, running: Int, unseen: Bool = false, phase: CGFloat) -> NSImage {
         let stacked = failed > 0 && running > 0
         let font = stacked ? stackedFont : singleFont
         // 2段でも輪の線は細くしない。細くすると等倍で「o」に見えた
@@ -56,15 +61,31 @@ enum StatusTitle {
 
         // 印は同じ幅の枠の真ん中に置き、数字はその右の列に右寄せで並べる。上下の段で印の位置も
         // 一の位の位置も揃う。桁の少ない方は印から離れるが、表の数字と同じ並べ方の方が読み比べやすい
-        let markX = iconSize + 4
+        // 点は影絵の右上の外に打つ。影絵の上に打つと、フクロウの右目に重なって眼帯に見えた（実測）。
+        // 数を並べるときは、その分だけ右へずらす
+        let badgeX = iconSize - 1
+        let shift = unseen && !rows.isEmpty ? badge : 0
+        let markX = iconSize + 4 + shift
         // 2段のときは輪を数字と同じ高さに収める。はみ出すと、上の段の印とくっついて見える
         let markWidth = cap + (stacked ? 1 : 3)
         let textX = markX + markWidth + gap
-        let width = ceil(textX + (rows.map(\.textWidth).max() ?? 0))
+        let width =
+            rows.isEmpty
+            ? (unseen ? badgeX + badge : iconSize) : ceil(textX + (rows.map(\.textWidth).max() ?? 0))
 
         let image = NSImage(size: NSSize(width: width, height: height), flipped: false) { _ in
             icon?.draw(in: NSRect(x: 0, y: (height - iconSize) / 2, width: iconSize, height: iconSize))
             guard let context = NSGraphicsContext.current?.cgContext else { return true }
+            if unseen {
+                // 影絵の端と重なる所は抜いてから打つ。抜かないと影絵とくっついて点に見えない
+                let dot = NSRect(x: badgeX, y: (height + iconSize) / 2 - badge, width: badge, height: badge)
+                context.saveGState()
+                context.setBlendMode(.clear)
+                context.fillEllipse(in: dot.insetBy(dx: -badgeMargin, dy: -badgeMargin))
+                context.restoreGState()
+                context.setFillColor(NSColor.black.cgColor)
+                context.fillEllipse(in: dot)
+            }
             for (row, baseline) in zip(rows, baselines) {
                 row.draw(
                     in: context, mark: NSRect(x: markX, y: baseline, width: markWidth, height: cap),

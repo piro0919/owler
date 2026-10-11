@@ -82,6 +82,8 @@ enum Strings {
     static var checkForUpdates: String { t("アップデートを確認", "Check for Updates") }
     static var showInMenuBar: String { t("メニューバーに表示", "Show in Menu Bar") }
     static func runningJobs(_ n: Int) -> String { t("実行中の定期実行 \(n) 件", "\(n) job(s) running") }
+    static func unseenJobs(_ n: Int) -> String { t("まだ見ていない回のある定期実行 \(n) 件", "\(n) job(s) with a run to review") }
+    static var notViewed: String { t("未読", "New") }
     static func failedJobs(_ n: Int) -> String { t("前回が失敗の定期実行 \(n) 件", "\(n) job(s) failed last time") }
     static func stateText(_ run: RunRecord) -> String {
         switch run.state {

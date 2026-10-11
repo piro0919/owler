@@ -5,10 +5,12 @@ enum CLI {
     static let usage = """
         Usage:
           owler add <id> --folder <dir> --at <HH:MM> [--at <HH:MM>...] [--weekdays <days>]
-                    [--summary <text>] [--also-log <file>] -- <command> [args...]
+                    [--summary <text>] [--also-log <file>] [--review] -- <command> [args...]
               Register a job and load it into launchd. <id> is lowercase letters, digits and '-'.
               <days> is like 1-5 or 0,6 (0 = Sunday). Omit it to run every day.
               Re-running add with the same <id> replaces the job. Times are local time.
+              --review marks the menu bar icon with a dot after each successful run, until you open that run.
+              Use it for jobs whose results you want to come and read, not for jobs that just need to succeed.
               A bare command name such as `claude` is resolved to its full path through your PATH now,
               because launchd runs jobs with a minimal PATH.
           owler import <plist> --id <id> [--folder <dir>] [--summary <text>]
@@ -70,6 +72,9 @@ enum CLI {
     }
 
     /// `--key value` を集め、`--` より後ろはそのまま残す
+    /// 値を取らないオプション
+    static let flags: Set<String> = ["review"]
+
     static func parse(_ args: [String]) -> Options? {
         var options = Options()
         var i = 0
@@ -79,7 +84,10 @@ enum CLI {
                 options.tail = Array(args[(i + 1)...])
                 break
             }
-            if arg.hasPrefix("--") {
+            if arg.hasPrefix("--"), flags.contains(String(arg.dropFirst(2))) {
+                options.values[String(arg.dropFirst(2)), default: []].append("true")
+                i += 1
+            } else if arg.hasPrefix("--") {
                 guard i + 1 < args.count else { return nil }
                 options.values[String(arg.dropFirst(2)), default: []].append(args[i + 1])
                 i += 2
@@ -96,7 +104,7 @@ enum CLI {
     static func add(_ args: [String]) -> Int32 {
         guard let o = parse(args), let id = o.positional.first, let folder = o.one("folder"), !o.tail.isEmpty
         else { return fail(usage) }
-        if let unknown = o.unknown(allowed: ["folder", "at", "weekdays", "summary", "also-log"]) {
+        if let unknown = o.unknown(allowed: ["folder", "at", "weekdays", "summary", "also-log", "review"]) {
             return fail("Unknown option --\(unknown)")
         }
         guard let executable = resolve(o.tail[0]) else {
@@ -116,7 +124,8 @@ enum CLI {
             folder: absolute(folder),
             command: [executable] + o.tail.dropFirst(),
             schedule: ScheduleParser.slots(times: times.compactMap { $0 }, weekdays: weekdays),
-            alsoLogTo: o.one("also-log").map(absolute))
+            alsoLogTo: o.one("also-log").map(absolute),
+            review: o.one("review") == nil ? nil : true)
         return install(job)
     }
 
@@ -182,7 +191,7 @@ enum CLI {
             let state =
                 switch last?.state {
                 case .running: "running"
-                case .succeeded: "ok"
+                case .succeeded: job.awaitsReview(last) ? "ok (new)" : "ok"
                 case .failed: "failed (\(last?.exitCode ?? 0))"
                 case .interrupted: "interrupted"
                 case nil: "never run"
@@ -197,8 +206,10 @@ enum CLI {
         guard let editor = Editor.installed else { return fail("Neither Cursor nor VS Code is installed") }
         // 窓が前に来るのを待ってから URL を渡すので、渡し終えるまで終わらずに待つ
         nonisolated(unsafe) var finished = false
+        let run = RunStore.all(id, limit: 1).first
+        if job.review == true, let run { RunStore.markSeen(id, run.stamp) }
         MainActor.assumeIsolated {
-            editor.open(job: job, run: RunStore.all(id, limit: 1).first) { finished = true }
+            editor.open(job: job, run: run) { finished = true }
         }
         let deadline = Date().addingTimeInterval(15)
         while !finished, Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.1)) }

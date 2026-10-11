@@ -13,10 +13,14 @@ final class Model: ObservableObject {
             guard selectedJob != oldValue else { return }
             openedRunID = nil
             loadRuns()
+            // 起動して最初のジョブを選んだだけでは、見たことにしない
+            if oldValue != nil { markSeen() }
         }
     }
     /// 開いている回。nil ならジョブのページ
-    @Published var openedRunID: String?
+    @Published var openedRunID: String? {
+        didSet { if openedRunID != nil { markSeen() } }
+    }
     /// 実行中の回があるあいだ、読み直すたびに進める。回のページの出力を描き直させる
     @Published private(set) var tick = 0
     /// 終わった回の報告。記録は数 MB になるので、描くたびに読まない
@@ -61,6 +65,13 @@ final class Model: ObservableObject {
         return reply
     }
 
+    /// 見に来てほしいジョブの、開いた回を見たことにする。ジョブのページでは最新の回
+    func markSeen() {
+        guard let job, job.review == true, let run, run.seen == nil else { return }
+        RunStore.markSeen(job.id, run.stamp)
+        reload()
+    }
+
     func runNow(_ id: String) {
         Launchctl.kickstart(Paths.label(id))
         // 記録は Owler run が書く。少し待ってから読み直す
@@ -69,6 +80,7 @@ final class Model: ObservableObject {
 
     func openInEditor() {
         guard let job else { return }
+        markSeen()
         Editor.installed?.open(job: job, run: run)
     }
 
@@ -86,6 +98,7 @@ struct MainView: View {
                 HStack(spacing: 10) {
                     StateDot(state: model.lastRuns[job.id]?.state)
                     Text(job.displayName).lineLimit(1)
+                        .fontWeight(job.awaitsReview(model.lastRuns[job.id]) ? .bold : nil)
                 }
                 .padding(.vertical, 4)
                 .padding(.leading, 6)
@@ -368,7 +381,11 @@ final class MainWindowController {
             self.window = window
         }
         model.reload()
-        if let job { model.selectedJob = job }
+        if let job {
+            model.selectedJob = job
+            // メニューバーから選んで開いたら、見たことにする。同じジョブを選び直しても selectedJob は変わらない
+            model.markSeen()
+        }
         Dock.show()
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate()

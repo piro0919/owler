@@ -19,7 +19,8 @@ enum Preferences {
 }
 
 /// メニューバーの入口。各ジョブの前回の成否と次回を並べ、押すと窓でそのジョブを開く。
-/// アイコンの横には、前回が失敗のジョブの数と、実行中のジョブの数を印つきで出す（StatusTitle）
+/// アイコンの横には、前回が失敗のジョブの数と、実行中のジョブの数を印つきで出す（StatusTitle）。
+/// 見に来てほしいジョブ（Job.review）にまだ開いていない回があれば、影絵の右上に点を打つ
 @MainActor
 final class MenuBar: NSObject, NSMenuDelegate {
     private var item: NSStatusItem?
@@ -29,6 +30,7 @@ final class MenuBar: NSObject, NSMenuDelegate {
     private var phase: CGFloat = 0.5
     private var failed = 0
     private var running = 0
+    private var unseen = 0
     private let open: (String?) -> Void
     private let openSettings: () -> Void
 
@@ -72,9 +74,11 @@ final class MenuBar: NSObject, NSMenuDelegate {
 
     private func refresh() {
         guard item != nil else { return }
-        let states = lastRuns().compactMap { $0.1?.state }
+        let runs = lastRuns()
+        let states = runs.compactMap { $0.1?.state }
         failed = states.filter { [.failed, .interrupted].contains($0) }.count
         running = states.filter { $0 == .running }.count
+        unseen = runs.filter { $0.0.awaitsReview($0.1) }.count
         draw()
         animate()
     }
@@ -83,11 +87,13 @@ final class MenuBar: NSObject, NSMenuDelegate {
         guard let button = item?.button else { return }
         button.title = ""
         button.image =
-            failed + running > 0
-            ? StatusTitle.image(icon: Self.statusIcon, failed: failed, running: running, phase: phase)
+            failed + running + unseen > 0
+            ? StatusTitle.image(
+                icon: Self.statusIcon, failed: failed, running: running, unseen: unseen > 0, phase: phase)
             : Self.statusIcon
         // 吹き出しは付け直すたびに消える。輪を描き直すたびに付け直すと読めなくなるので、変わったときだけ
         let parts = [
+            unseen > 0 ? Strings.unseenJobs(unseen) : nil,
             failed > 0 ? Strings.failedJobs(failed) : nil, running > 0 ? Strings.runningJobs(running) : nil,
         ].compactMap { $0 }
         let tip = parts.isEmpty ? "Owler" : parts.joined(separator: "\n")
@@ -164,6 +170,7 @@ final class MenuBar: NSObject, NSMenuDelegate {
         _ job: Job, _ run: RunRecord?, now: Date = Date(), calendar: Calendar = .current
     ) -> String {
         var parts: [String] = []
+        if job.awaitsReview(run) { parts.append(Strings.notViewed) }
         if let run {
             if run.state != .succeeded {
                 parts.append(Strings.stateText(run))

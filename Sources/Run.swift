@@ -10,6 +10,8 @@ struct RunRecord: Codable, Equatable, Identifiable {
     var session: String?
     /// 記録を取っている `Owler run` のプロセス。終わりを書けずに止まった回を見分ける
     var pid: Int32?
+    /// 利用者がこの回を開いた時刻。見に来てほしいジョブ（Job.review）の印を消すのに使う
+    var seen: Date?
 
     var id: String { stamp }
 
@@ -78,6 +80,18 @@ enum RunStore {
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(record).write(to: Self.record(id, record.stamp))
+    }
+
+    /// 開いたことを書き込む。まだ動いている回は、終わりを書くときに上書きされるので書かない
+    static func markSeen(_ id: String, _ stamp: String, at date: Date = Date()) {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let data = try? Data(contentsOf: record(id, stamp)),
+            var run = try? decoder.decode(RunRecord.self, from: data),
+            run.end != nil, run.seen == nil
+        else { return }
+        run.seen = date
+        try? save(run, for: id)
     }
 
     /// 出力の末尾

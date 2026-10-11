@@ -102,6 +102,20 @@ enum SelfTest {
             check(line(run(at(10, 9), 1)).hasPrefix(Strings.failed(1) + " · "), "失敗は言葉で添える")
             check(line(run(at(8, 9), 0)).hasPrefix(Strings.lastRun("")), "予定の回が無ければ前回を出す")
             check(line(nil).hasPrefix(Strings.noRuns + " · "), "まだ動いていないことも出す")
+
+            // 見に来てほしいジョブ
+            var watched = daily
+            watched.review = true
+            var done = run(at(10, 9), 0)
+            check(!daily.awaitsReview(done), "見に来てほしいジョブでなければ印を出さない")
+            check(watched.awaitsReview(done), "成功してまだ開いていない回には印を出す")
+            check(
+                MenuBar.line(watched, done, now: now, calendar: calendar).hasPrefix(Strings.notViewed + " · "),
+                "メニューにも未読と添える")
+            check(!watched.awaitsReview(run(at(10, 9), 1)), "失敗は「!」で数えるので印を出さない")
+            check(!watched.awaitsReview(nil), "まだ動いていなければ印を出さない")
+            done.seen = now
+            check(!watched.awaitsReview(done), "開いた回には印を出さない")
         }
 
         // 日時の書き方は地域に従う
@@ -154,6 +168,8 @@ enum SelfTest {
             check(single.size.height == 22, "メニューバーの厚みに収める")
             check(single.size.width > 18 && single.isTemplate, "影絵の右に印と数を足し、テンプレート画像にする")
             check(both.size.width >= single.size.width, "桁が増えれば幅も増える")
+            let dot = StatusTitle.image(icon: icon, failed: 0, running: 0, unseen: true, phase: 0)
+            check(dot.size.width > 18 && dot.size.width < 26 && dot.isTemplate, "点だけなら影絵の右に点の分だけ広げる")
         }
 
         // 子の終わり方
@@ -183,6 +199,8 @@ enum SelfTest {
 
         // コマンドの名前を絶対パスにする
         do {
+            check(CLI.parse(["a", "--review", "--folder", "/tmp"])?.one("review") != nil, "--review は値を取らない")
+            check(CLI.parse(["a", "--review", "--folder", "/tmp"])?.one("folder") == "/tmp", "--review の次も読める")
             check(CLI.resolve("sh", environment: ["PATH": "/nowhere:/bin"]) == "/bin/sh", "PATH から探す")
             check(CLI.resolve("no-such-command-xyz", environment: ["PATH": "/bin"]) == nil, "無ければ断る")
             check(CLI.resolve("/bin/sh") == "/bin/sh", "絶対パスはそのまま")
