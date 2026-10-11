@@ -84,6 +84,11 @@ Owler also sits in the menu bar, listing each job with the result of its last
 run. A number next to the owl counts the jobs whose last run failed. Turn it off
 in **Settings…** if you only want the window.
 
+Some jobs are there for you to read, such as a morning digest written by
+`claude -p`. Add them with `--review`, and after each successful run a dot
+appears next to the owl until you open that run. It makes no sound and shows no
+notification; it only tells you something is waiting.
+
 ## Building
 
 ```bash
