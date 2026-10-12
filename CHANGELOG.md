@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.7]
+
+- A job can now ask you to come and read a single run. Owler passes a file path in `OWLER_REVIEW_FILE`, and if the job writes anything to it, that run gets the dot in the menu bar when it succeeds
+- This works for any job, with or without `--review`. Jobs added with `--review` still get the dot after every successful run
+
 ## [0.1.6]
 
 - Jobs can now ask you to come and read their results. Add a job with `--review`, and after each successful run a dot appears next to the owl in the menu bar
