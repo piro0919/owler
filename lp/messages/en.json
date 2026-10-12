@@ -44,7 +44,7 @@
       },
       {
         "title": "Menu bar",
-        "body": "The latest result of each job, with a count of failures. Jobs you want to come back and read are marked until you open them."
+        "body": "The latest result of each job, with a count of failures. Jobs you want to come back and read, or a single run that asks for you, are marked until you open them."
       }
     ]
   },

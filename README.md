@@ -89,6 +89,11 @@ Some jobs are there for you to read, such as a morning digest written by
 appears next to the owl until you open that run. It makes no sound and shows no
 notification; it only tells you something is waiting.
 
+A job can also ask for the dot on a single run. Owler passes a file path in
+`OWLER_REVIEW_FILE`; write anything to it, and if the run succeeds, it gets the
+dot, with or without `--review`. A job that only needs you now and then, such as
+one that drafts replies for you to approve, can stay quiet the rest of the time.
+
 ## Building
 
 ```bash
