@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.1.8]
 
 - A run you haven't opened keeps its dot even after newer runs come in, or a newer run fails. Before, only the latest run counted, so the dot could disappear before you saw it
 - For jobs added with `--review`, opening a run also clears the older unread runs, since a newer report replaces them. Runs a job asked you to read through `OWLER_REVIEW_FILE` still each wait for you
