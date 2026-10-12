@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+- A run you haven't opened keeps its dot even after newer runs come in, or a newer run fails. Before, only the latest run counted, so the dot could disappear before you saw it
+- For jobs added with `--review`, opening a run also clears the older unread runs, since a newer report replaces them. Runs a job asked you to read through `OWLER_REVIEW_FILE` still each wait for you
+- Picking a job in the window no longer counts as reading it. The dot goes away when you open the run itself, or open the job in Claude Code
+- Clicking a job in the menu bar opens its newest unread run directly
+- Unread runs are shown in bold in the window's list of runs
+- Adding `--review` to an existing job no longer marks all its past runs as unread
+
 ## [0.1.7]
 
 - A job can now ask you to come and read a single run. Owler passes a file path in `OWLER_REVIEW_FILE`, and if the job writes anything to it, that run gets the dot in the menu bar when it succeeds

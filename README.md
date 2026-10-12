@@ -86,12 +86,15 @@ in **Settings…** if you only want the window.
 
 Some jobs are there for you to read, such as a morning digest written by
 `claude -p`. Add them with `--review`, and after each successful run a dot
-appears next to the owl until you open that run. It makes no sound and shows no
+appears next to the owl until you open that run. A newer run doesn't clear it,
+but opening one run also clears the older ones, so a few missed days take one
+click. Clicking the job in the menu takes you to the newest unread run. It makes no sound and shows no
 notification; it only tells you something is waiting.
 
 A job can also ask for the dot on a single run. Owler passes a file path in
 `OWLER_REVIEW_FILE`; write anything to it, and if the run succeeds, it gets the
-dot, with or without `--review`. A job that only needs you now and then, such as
+dot, with or without `--review`. Each of these runs keeps its dot until you
+open that run itself. A job that only needs you now and then, such as
 one that drafts replies for you to approve, can stay quiet the rest of the time.
 
 ## Building
