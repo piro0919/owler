@@ -68,8 +68,9 @@ final class MenuBar: NSObject, NSMenuDelegate {
         }
     }
 
-    private func lastRuns() -> [(Job, RunRecord?)] {
-        JobStore.all().map { ($0, RunStore.all($0.id, limit: 1).first) }
+    /// 各ジョブの前回と、まだ見に来ていない回があるか
+    private func lastRuns() -> [(Job, RunRecord?, Bool)] {
+        JobStore.all().map { ($0, RunStore.all($0.id, limit: 1).first, !RunStore.unseen($0).isEmpty) }
     }
 
     private func refresh() {
@@ -78,7 +79,7 @@ final class MenuBar: NSObject, NSMenuDelegate {
         let states = runs.compactMap { $0.1?.state }
         failed = states.filter { [.failed, .interrupted].contains($0) }.count
         running = states.filter { $0 == .running }.count
-        unseen = runs.filter { $0.0.awaitsReview($0.1) }.count
+        unseen = runs.filter(\.2).count
         draw()
         animate()
     }
@@ -141,14 +142,14 @@ final class MenuBar: NSObject, NSMenuDelegate {
             empty.isEnabled = false
             menu.addItem(empty)
         }
-        for (job, run) in runs {
+        for (job, run, unseen) in runs {
             let item = NSMenuItem(title: job.displayName, action: #selector(openJob(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = job.id
             item.image = Self.dot(run?.state)
             item.toolTip = job.summary.isEmpty ? nil : job.summary
             // 2行目に次回を出す。subtitle の無い版では1行に並べる
-            let line = Self.line(job, run)
+            let line = Self.line(job, run, unseen: unseen)
             if #available(macOS 14.4, *) {
                 item.subtitle = line
             } else {
@@ -167,10 +168,10 @@ final class MenuBar: NSObject, NSMenuDelegate {
     /// 各ジョブの2行目。前回の成功は丸の色で分かるので書かず、失敗・中断・実行中だけを言葉で添える。
     /// ただし直前の予定の回が記録に無いときは、成功でも前回の日時を出す。スリープで飛ばした回などに気付けるように
     nonisolated static func line(
-        _ job: Job, _ run: RunRecord?, now: Date = Date(), calendar: Calendar = .current
+        _ job: Job, _ run: RunRecord?, unseen: Bool = false, now: Date = Date(), calendar: Calendar = .current
     ) -> String {
         var parts: [String] = []
-        if job.awaitsReview(run) { parts.append(Strings.notViewed) }
+        if unseen { parts.append(Strings.notViewed) }
         if let run {
             if run.state != .succeeded {
                 parts.append(Strings.stateText(run))

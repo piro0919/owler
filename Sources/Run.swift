@@ -73,6 +73,19 @@ enum RunStore {
             .compactMap { try? decoder.decode(RunRecord.self, from: Data(contentsOf: $0)) }
     }
 
+    /// 印のために読み直す回数。3秒ごとに読むので、残している回をすべては読まない
+    static let unseenWindow = 30
+
+    /// まだ見に来ていない回。新しい順
+    static func unseen(_ job: Job) -> [RunRecord] {
+        job.unseenRuns(all(job.id, limit: unseenWindow))
+    }
+
+    /// その回を開いたことを書き込む。古い回もまとめて見たことにするかは Job.seenByOpening
+    static func markSeen(_ job: Job, opening run: RunRecord) {
+        for seen in job.seenByOpening(run, among: all(job.id, limit: unseenWindow)) { markSeen(job.id, seen.stamp) }
+    }
+
     /// 残す回数。これより古い回は記録も出力も消す
     static let keep = 100
 

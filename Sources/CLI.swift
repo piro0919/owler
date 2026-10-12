@@ -128,7 +128,13 @@ enum CLI {
             schedule: ScheduleParser.slots(times: times.compactMap { $0 }, weekdays: weekdays),
             alsoLogTo: o.one("also-log").map(absolute),
             review: o.one("review") == nil ? nil : true)
-        return install(job)
+        let addsReview = job.review == true && JobStore.load(id)?.review != true
+        let status = install(job)
+        // あとから --review を付けたジョブは、それまでの回を見たことにする。でないと付けた途端に過去の回すべてに印が付く
+        if status == 0, addsReview {
+            for run in RunStore.all(id, limit: RunStore.keep) { RunStore.markSeen(id, run.stamp) }
+        }
+        return status
     }
 
     static func importJob(_ args: [String]) -> Int32 {
@@ -193,12 +199,14 @@ enum CLI {
             let state =
                 switch last?.state {
                 case .running: "running"
-                case .succeeded: job.awaitsReview(last) ? "ok (new)" : "ok"
+                case .succeeded: "ok"
                 case .failed: "failed (\(last?.exitCode ?? 0))"
                 case .interrupted: "interrupted"
                 case nil: "never run"
                 }
-            print("\(job.id)\t\(job.scheduleText)\t\(state)\t\(job.summary)")
+            // 前の回が未読のまま残っていれば、前回が失敗でも添える
+            let new = RunStore.unseen(job).isEmpty ? "" : " (new)"
+            print("\(job.id)\t\(job.scheduleText)\t\(state)\(new)\t\(job.summary)")
         }
         return 0
     }
@@ -209,7 +217,7 @@ enum CLI {
         // 窓が前に来るのを待ってから URL を渡すので、渡し終えるまで終わらずに待つ
         nonisolated(unsafe) var finished = false
         let run = RunStore.all(id, limit: 1).first
-        if let run, job.awaitsReview(run) { RunStore.markSeen(id, run.stamp) }
+        if let run { RunStore.markSeen(job, opening: run) }
         MainActor.assumeIsolated {
             editor.open(job: job, run: run) { finished = true }
         }

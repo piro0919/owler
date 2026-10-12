@@ -110,7 +110,8 @@ enum SelfTest {
             check(!daily.awaitsReview(done), "見に来てほしいジョブでなければ印を出さない")
             check(watched.awaitsReview(done), "成功してまだ開いていない回には印を出す")
             check(
-                MenuBar.line(watched, done, now: now, calendar: calendar).hasPrefix(Strings.notViewed + " · "),
+                MenuBar.line(watched, done, unseen: true, now: now, calendar: calendar)
+                    .hasPrefix(Strings.notViewed + " · "),
                 "メニューにも未読と添える")
             check(!watched.awaitsReview(run(at(10, 9), 1)), "失敗は「!」で数えるので印を出さない")
             check(!watched.awaitsReview(nil), "まだ動いていなければ印を出さない")
@@ -131,6 +132,36 @@ enum SelfTest {
             check(RunStore.asked(file), "何か書いてあれば伝えたとみなす")
             try? FileManager.default.removeItem(at: file)
             check(!RunStore.asked(file), "書かれなければ伝えなかったとみなす")
+
+            // 未読は最新の回に限らない。次の回が来ても、前の回の印は消さない
+            var older = run(at(10, 9), 0)
+            older.stamp = "older"
+            older.asked = true
+            var newer = run(at(10, 12), 0)
+            newer.stamp = "newer"
+            check(daily.unseenRuns([newer, older]).map(\.stamp) == ["older"], "次の回が来ても前の回の未読は残る")
+            newer.exitCode = 1
+            check(daily.unseenRuns([newer, older]).map(\.stamp) == ["older"], "次の回が失敗しても前の回の未読は残る")
+            older.seen = now
+            check(daily.unseenRuns([newer, older]).isEmpty, "開いた回は未読から外す")
+
+            // --review の回は、新しい回を開けば古い回もまとめて見たことにする。頼んだ回は残す
+            var day1 = run(at(8, 9), 0)
+            day1.stamp = "1"
+            var day2 = run(at(9, 9), 0)
+            day2.stamp = "2"
+            day2.asked = true
+            var day3 = run(at(10, 9), 0)
+            day3.stamp = "3"
+            check(
+                watched.seenByOpening(day3, among: [day3, day2, day1]).map(\.stamp) == ["3", "1"],
+                "--review の回は古い回もまとめて既読、頼んだ回は残す")
+            check(
+                watched.seenByOpening(day1, among: [day3, day2, day1]).map(\.stamp) == ["1"],
+                "古い回を開いても新しい回は既読にしない")
+            check(
+                daily.seenByOpening(day3, among: [day3, day2, day1]).isEmpty,
+                "--review でないジョブは、頼んだ回だけを開いたときに既読にする")
         }
 
         // 日時の書き方は地域に従う

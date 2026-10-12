@@ -6,6 +6,8 @@ import SwiftUI
 final class Model: ObservableObject {
     @Published var jobs: [Job] = []
     @Published var lastRuns: [String: RunRecord] = [:]
+    /// まだ見に来ていない回のあるジョブ
+    @Published var unseenJobs: Set<String> = []
     @Published var runs: [RunRecord] = []
     /// 切り替えたらその場で読み直す。3秒ごとの読み直しを待つと、前のジョブの一覧が残って見える
     @Published var selectedJob: String? {
@@ -13,8 +15,6 @@ final class Model: ObservableObject {
             guard selectedJob != oldValue else { return }
             openedRunID = nil
             loadRuns()
-            // 起動して最初のジョブを選んだだけでは、見たことにしない
-            if oldValue != nil { markSeen() }
         }
     }
     /// 開いている回。nil ならジョブのページ
@@ -47,6 +47,8 @@ final class Model: ObservableObject {
         var last: [String: RunRecord] = [:]
         for job in jobs { last[job.id] = RunStore.all(job.id, limit: 1).first }
         if last != lastRuns { lastRuns = last }
+        let unseen = Set(jobs.filter { !RunStore.unseen($0).isEmpty }.map(\.id))
+        if unseen != unseenJobs { unseenJobs = unseen }
         loadRuns()
     }
 
@@ -65,10 +67,11 @@ final class Model: ObservableObject {
         return reply
     }
 
-    /// 見に来てほしいジョブの、開いた回を見たことにする。ジョブのページでは最新の回
+    /// 見に来てほしいジョブの、開いた回を見たことにする。ジョブのページでは最新の回。
+    /// ジョブを選んだだけでは見たことにしない。ジョブのページには報告が出ないので、読まずに印が消える
     func markSeen() {
-        guard let job, let run, job.awaitsReview(run) else { return }
-        RunStore.markSeen(job.id, run.stamp)
+        guard let job, let run, !job.seenByOpening(run, among: runs).isEmpty else { return }
+        RunStore.markSeen(job, opening: run)
         reload()
     }
 
@@ -98,7 +101,7 @@ struct MainView: View {
                 HStack(spacing: 10) {
                     StateDot(state: model.lastRuns[job.id]?.state)
                     Text(job.displayName).lineLimit(1)
-                        .fontWeight(job.awaitsReview(model.lastRuns[job.id]) ? .bold : nil)
+                        .fontWeight(model.unseenJobs.contains(job.id) ? .bold : nil)
                 }
                 .padding(.vertical, 4)
                 .padding(.leading, 6)
@@ -175,7 +178,7 @@ struct JobPage: View {
                         VStack(spacing: 0) {
                             ForEach(Array(model.runs.enumerated()), id: \.element.id) { index, run in
                                 if index > 0 { Divider() }
-                                RunRow(run: run) { model.openedRunID = run.id }
+                                RunRow(run: run, unseen: job.awaitsReview(run)) { model.openedRunID = run.id }
                             }
                         }
                     }
@@ -194,6 +197,8 @@ struct JobPage: View {
 /// 実行の表の1行。日時と状態だけ。押すとその回のページへ
 struct RunRow: View {
     let run: RunRecord
+    /// まだ見に来ていない回は日時を太字にする。一覧の名前と同じ
+    var unseen = false
     let open: () -> Void
     @State private var hovering = false
 
@@ -201,6 +206,7 @@ struct RunRow: View {
         Button(action: open) {
             HStack(spacing: 12) {
                 Text(Format.dateTime(run.start)).monospacedDigit()
+                    .fontWeight(unseen ? .bold : nil)
                 Spacer()
                 StateDot(state: run.state)
                 Text(Strings.stateName(run)).foregroundStyle(.secondary)
@@ -383,8 +389,10 @@ final class MainWindowController {
         model.reload()
         if let job {
             model.selectedJob = job
-            // メニューバーから選んで開いたら、見たことにする。同じジョブを選び直しても selectedJob は変わらない
-            model.markSeen()
+            // メニューバーから開いたとき、まだ見に来ていない回があれば、いちばん新しいその回を開く（開けば見たことになる）
+            if let definition = model.job, let run = RunStore.unseen(definition).first {
+                model.openedRunID = run.id
+            }
         }
         Dock.show()
         window?.makeKeyAndOrderFront(nil)

@@ -33,6 +33,19 @@ struct Job: Codable, Identifiable, Equatable {
         return run.state == .succeeded && run.seen == nil
     }
 
+    /// まだ見に来ていない回すべて。新しい順のまま返す。最新の回だけを見ると、次の回が来たところで印が黙って消える
+    func unseenRuns(_ runs: [RunRecord]) -> [RunRecord] {
+        runs.filter { awaitsReview($0) }
+    }
+
+    /// その回を開いたときに、見たことにする回。`--review` のジョブは、それより古い未読の回もまとめて。
+    /// 毎日の報告は新しい回で置き換わるので、溜まった古い回まで一つずつ開かせない。
+    /// ジョブが頼んだ回（asked）は回ごとに中身が違う（返信の下書きなど）ので、開いた回だけ
+    func seenByOpening(_ run: RunRecord, among runs: [RunRecord]) -> [RunRecord] {
+        let older = review == true ? unseenRuns(runs).filter { $0.stamp < run.stamp && $0.asked != true } : []
+        return (awaitsReview(run) ? [run] : []) + older
+    }
+
     /// 画面に出す名前。説明があればそれ、無ければ ID
     var displayName: String { summary.isEmpty ? id : summary }
 
