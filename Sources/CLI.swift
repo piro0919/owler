@@ -11,6 +11,8 @@ enum CLI {
               Re-running add with the same <id> replaces the job. Times are local time.
               --review marks the menu bar icon with a dot after each successful run, until you open that run.
               Use it for jobs whose results you want to come and read, not for jobs that just need to succeed.
+              Any job can also ask for the dot on a single run: Owler passes a file path in $OWLER_REVIEW_FILE,
+              and if the job writes anything to it, that run gets the dot when it succeeds.
               A bare command name such as `claude` is resolved to its full path through your PATH now,
               because launchd runs jobs with a minimal PATH.
           owler import <plist> --id <id> [--folder <dir>] [--summary <text>]
@@ -207,7 +209,7 @@ enum CLI {
         // 窓が前に来るのを待ってから URL を渡すので、渡し終えるまで終わらずに待つ
         nonisolated(unsafe) var finished = false
         let run = RunStore.all(id, limit: 1).first
-        if job.review == true, let run { RunStore.markSeen(id, run.stamp) }
+        if let run, job.awaitsReview(run) { RunStore.markSeen(id, run.stamp) }
         MainActor.assumeIsolated {
             editor.open(job: job, run: run) { finished = true }
         }

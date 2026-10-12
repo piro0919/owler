@@ -67,7 +67,7 @@ final class Model: ObservableObject {
 
     /// 見に来てほしいジョブの、開いた回を見たことにする。ジョブのページでは最新の回
     func markSeen() {
-        guard let job, job.review == true, let run, run.seen == nil else { return }
+        guard let job, let run, job.awaitsReview(run) else { return }
         RunStore.markSeen(job.id, run.stamp)
         reload()
     }

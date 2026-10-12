@@ -116,6 +116,21 @@ enum SelfTest {
             check(!watched.awaitsReview(nil), "まだ動いていなければ印を出さない")
             done.seen = now
             check(!watched.awaitsReview(done), "開いた回には印を出さない")
+
+            // ジョブが自分で見に来てほしいと伝えた回
+            var asked = run(at(10, 9), 0)
+            asked.asked = true
+            check(daily.awaitsReview(asked), "--review でなくても、伝えた回には印を出す")
+            check(!daily.awaitsReview(run(at(10, 9), 0)), "伝えなかった回には印を出さない")
+            asked.exitCode = 1
+            check(!daily.awaitsReview(asked), "伝えても失敗なら印を出さない")
+            let file = FileManager.default.temporaryDirectory.appendingPathComponent("owler-selftest.review")
+            try? "  \n".write(to: file, atomically: true, encoding: .utf8)
+            check(!RunStore.asked(file), "空白だけなら伝えなかったとみなす")
+            try? "reply drafts are waiting\n".write(to: file, atomically: true, encoding: .utf8)
+            check(RunStore.asked(file), "何か書いてあれば伝えたとみなす")
+            try? FileManager.default.removeItem(at: file)
+            check(!RunStore.asked(file), "書かれなければ伝えなかったとみなす")
         }
 
         // 日時の書き方は地域に従う

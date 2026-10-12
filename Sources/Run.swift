@@ -12,6 +12,8 @@ struct RunRecord: Codable, Equatable, Identifiable {
     var pid: Int32?
     /// 利用者がこの回を開いた時刻。見に来てほしいジョブ（Job.review）の印を消すのに使う
     var seen: Date?
+    /// ジョブが `OWLER_REVIEW_FILE` に書いて、この回を見に来てほしいと伝えた。`--review` でないジョブでも印を出す
+    var asked: Bool?
 
     var id: String { stamp }
 
@@ -46,6 +48,17 @@ enum RunStore {
 
     static func log(_ id: String, _ stamp: String) -> URL {
         Paths.runs(id).appendingPathComponent("\(stamp).log")
+    }
+
+    /// ジョブに `OWLER_REVIEW_FILE` で渡す目印。書かれていれば、その回を見に来てほしいということ。終わったら消す
+    static func reviewFile(_ id: String, _ stamp: String) -> URL {
+        Paths.runs(id).appendingPathComponent("\(stamp).review")
+    }
+
+    /// 目印に何か書かれていたか。空白だけなら書かなかったとみなす
+    static func asked(_ file: URL) -> Bool {
+        guard let data = try? Data(contentsOf: file) else { return false }
+        return !String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// 新しい順
@@ -130,6 +143,8 @@ enum Runner {
 
         var environment = ProcessInfo.processInfo.environment
         if let extra = job.environment { environment.merge(extra) { _, new in new } }
+        let reviewFile = RunStore.reviewFile(id, record.stamp)
+        environment["OWLER_REVIEW_FILE"] = reviewFile.path
         let pipe = Pipe()
         let done = DispatchSemaphore(value: 0)
         pipe.fileHandleForReading.readabilityHandler = { handle in
@@ -165,6 +180,8 @@ enum Runner {
         record.end = Date()
         record.exitCode = status
         record.session = Sessions.find(folder: Paths.expand(job.folder), from: start, to: record.end!)
+        if RunStore.asked(reviewFile) { record.asked = true }
+        try? fm.removeItem(at: reviewFile)
         try? RunStore.save(record, for: id)
         RunStore.prune(id)
         return status

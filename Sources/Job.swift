@@ -26,9 +26,10 @@ struct Job: Codable, Identifiable, Equatable {
         var weekday: Int?
     }
 
-    /// まだ見に来ていない回か。失敗は「!」で数えるので、ここでは成功した回だけを見る
+    /// まだ見に来ていない回か。`--review` のジョブの回と、ジョブが自分で見に来てほしいと伝えた回（RunRecord.asked）。
+    /// 失敗は「!」で数えるので、ここでは成功した回だけを見る
     func awaitsReview(_ run: RunRecord?) -> Bool {
-        guard review == true, let run else { return false }
+        guard let run, review == true || run.asked == true else { return false }
         return run.state == .succeeded && run.seen == nil
     }
 
