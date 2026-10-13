@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.9]
+
+- The menu now gathers jobs with an unread run at the top, under their own heading, with the rest listed below. Before, an unread job only said "New" in its second line and was easy to miss among the others
+
 ## [0.1.8]
 
 - A run you haven't opened keeps its dot even after newer runs come in, or a newer run fails. Before, only the latest run counted, so the dot could disappear before you saw it
