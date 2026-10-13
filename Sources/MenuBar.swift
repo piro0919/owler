@@ -142,20 +142,16 @@ final class MenuBar: NSObject, NSMenuDelegate {
             empty.isEnabled = false
             menu.addItem(empty)
         }
-        for (job, run, unseen) in runs {
-            let item = NSMenuItem(title: job.displayName, action: #selector(openJob(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = job.id
-            item.image = Self.dot(run?.state)
-            item.toolTip = job.summary.isEmpty ? nil : job.summary
-            // 2行目に次回を出す。subtitle の無い版では1行に並べる
-            let line = Self.line(job, run, unseen: unseen)
-            if #available(macOS 14.4, *) {
-                item.subtitle = line
-            } else {
-                item.title = "\(job.displayName)  —  \(line)"
-            }
-            menu.addItem(item)
+        // 未読の回のあるジョブを上にまとめる（Hawky の許可待ちと同じ）。2行目に「未読」と添えるだけでは埋もれた。
+        // 未読が無ければ見出しは出さない。あれば両方に付ける。片方だけだと、見出しの無い側が何の行なのか分からない
+        let sections = [
+            (Strings.unseenHeader, runs.filter(\.2)),
+            (Strings.otherJobsHeader, runs.filter { !$0.2 }),
+        ].filter { !$0.1.isEmpty }
+        for (index, (header, rows)) in sections.enumerated() {
+            if index > 0 { menu.addItem(.separator()) }
+            if sections.count > 1 || header == Strings.unseenHeader { menu.addItem(.sectionHeader(title: header)) }
+            for (job, run, _) in rows { menu.addItem(row(job, run)) }
         }
         menu.addItem(.separator())
         menu.addItem(action(Strings.openOwler, #selector(openWindow)))
@@ -165,13 +161,28 @@ final class MenuBar: NSObject, NSMenuDelegate {
         refresh()
     }
 
+    private func row(_ job: Job, _ run: RunRecord?) -> NSMenuItem {
+        let item = NSMenuItem(title: job.displayName, action: #selector(openJob(_:)), keyEquivalent: "")
+        item.target = self
+        item.representedObject = job.id
+        item.image = Self.dot(run?.state)
+        item.toolTip = job.summary.isEmpty ? nil : job.summary
+        // 2行目に次回を出す。subtitle の無い版では1行に並べる
+        let line = Self.line(job, run)
+        if #available(macOS 14.4, *) {
+            item.subtitle = line
+        } else {
+            item.title = "\(job.displayName)  —  \(line)"
+        }
+        return item
+    }
+
     /// 各ジョブの2行目。前回の成功は丸の色で分かるので書かず、失敗・中断・実行中だけを言葉で添える。
     /// ただし直前の予定の回が記録に無いときは、成功でも前回の日時を出す。スリープで飛ばした回などに気付けるように
     nonisolated static func line(
-        _ job: Job, _ run: RunRecord?, unseen: Bool = false, now: Date = Date(), calendar: Calendar = .current
+        _ job: Job, _ run: RunRecord?, now: Date = Date(), calendar: Calendar = .current
     ) -> String {
         var parts: [String] = []
-        if unseen { parts.append(Strings.notViewed) }
         if let run {
             if run.state != .succeeded {
                 parts.append(Strings.stateText(run))

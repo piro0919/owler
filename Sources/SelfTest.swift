@@ -109,10 +109,6 @@ enum SelfTest {
             var done = run(at(10, 9), 0)
             check(!daily.awaitsReview(done), "見に来てほしいジョブでなければ印を出さない")
             check(watched.awaitsReview(done), "成功してまだ開いていない回には印を出す")
-            check(
-                MenuBar.line(watched, done, unseen: true, now: now, calendar: calendar)
-                    .hasPrefix(Strings.notViewed + " · "),
-                "メニューにも未読と添える")
             check(!watched.awaitsReview(run(at(10, 9), 1)), "失敗は「!」で数えるので印を出さない")
             check(!watched.awaitsReview(nil), "まだ動いていなければ印を出さない")
             done.seen = now
