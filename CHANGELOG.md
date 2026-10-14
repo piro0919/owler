@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.10]
+
+- A job's page in the window now says when the job is marked unread: after every successful run, never, or in the job's own words for a job that asks on a single run
+- A run's page has buttons to step to the newer or older run, without going back to the list. The ↑ and ↓ keys do the same
+- Settings now open inside the main window, from the gear at the bottom of the job list or with ⌘,. There is no separate settings window, and the menu no longer has a Settings item
+- The menu lists jobs in the order they run next, so the times read from top to bottom
+- The window shows what each run cost, as Claude Code counts it, on the run's page. A job's page shows the average per run and an estimate for a month on its schedule
+- Claude's report on a run's page is now shown as formatted text, with headings, lists and bold, instead of raw Markdown
+- Evenly spaced times are summed up, such as "Daily, every 20 min from 9:00 to 0:40", instead of listing every time
+- The job list is a little wider, so longer names are no longer cut off
+- `owler add` takes `--review-when <text>` to write those words, such as "when it drafts a reply"
+
 ## [0.1.9]
 
 - The menu now gathers jobs with an unread run at the top, under their own heading, with the rest listed below. Before, an unread job only said "New" in its second line and was easy to miss among the others
