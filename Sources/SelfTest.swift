@@ -103,6 +103,11 @@ enum SelfTest {
             check(line(run(at(8, 9), 0)).hasPrefix(Strings.lastRun("")), "予定の回が無ければ前回を出す")
             check(line(nil).hasPrefix(Strings.noRuns + " · "), "まだ動いていないことも出す")
 
+            // ジョブが起こした Claude Code だけを拾う。親を辿ってジョブのプロセスに行き着くか
+            check(SessionWatcher.isDescendant(getpid(), of: getppid()), "子は親の子孫")
+            check(SessionWatcher.isDescendant(getpid(), of: getpid()), "exec で入れ替わった本人も拾う")
+            check(!SessionWatcher.isDescendant(getppid(), of: getpid()), "親は子の子孫ではない")
+
             // 料金は Claude Code が書く cost-state の最後の合計
             let jsonl = """
                 {"type":"assistant","message":{"content":[]}}

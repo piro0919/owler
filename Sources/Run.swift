@@ -171,6 +171,7 @@ enum Runner {
         }
 
         let status: Int32
+        var watched: [String]?
         do {
             let pid = try Spawn.run(
                 executable: Paths.expand(executable), arguments: Array(job.command.dropFirst()),
@@ -178,7 +179,9 @@ enum Runner {
                 output: pipe.fileHandleForWriting.fileDescriptor)
             // 子に渡した書き口は閉じる。開いたままだと、子が終わっても終わりの印が来ない
             try? pipe.fileHandleForWriting.close()
+            let watcher = SessionWatcher(root: pid)
             status = Spawn.wait(pid)
+            watched = watcher.stop()
             // 裏で起こした子が出力をつかんだまま残ると、終わりの印が来ない。少しだけ待って読むのをやめる
             if done.wait(timeout: .now() + 2) == .timedOut {
                 pipe.fileHandleForReading.readabilityHandler = nil
@@ -192,7 +195,12 @@ enum Runner {
 
         record.end = Date()
         record.exitCode = status
-        record.session = Sessions.find(folder: Paths.expand(job.folder), from: start, to: record.end!)
+        let folder = Paths.expand(job.folder)
+        // 会話の置き場が無い古い Claude Code だけは、作業フォルダと時刻で探す
+        record.session =
+            SessionWatcher.isAvailable
+            ? Sessions.latest(watched ?? [], folder: folder)
+            : Sessions.find(folder: folder, from: start, to: record.end!)
         if RunStore.asked(reviewFile) { record.asked = true }
         try? fm.removeItem(at: reviewFile)
         try? RunStore.save(record, for: id)
@@ -308,8 +316,87 @@ enum Spawn {
     }
 }
 
+/// ジョブが動いているあいだに、ジョブが起こした Claude Code の会話を拾う。Claude Code は動いているあいだ
+/// `sessions/<番号>.json` にプロセスの番号と会話の ID を書き、終わると消す（`claude -p` も同じ。2026-10-14 に実測）。
+/// 親を辿ってジョブのプロセスに行き着く番号だけを取る。作業フォルダと時刻だけで探していた頃は、同じフォルダの
+/// 別のジョブの会話を取り違えた（予約投稿のジョブの回に、3分後に始まった返信のジョブの会話が付いた）
+final class SessionWatcher: @unchecked Sendable {
+    /// 会話の置き場があるか。無ければ古い Claude Code で、番号から会話を引けない
+    static var isAvailable: Bool { FileManager.default.fileExists(atPath: Paths.claudeSessions.path) }
+
+    private let root: pid_t
+    private let lock = NSLock()
+    private var found: [String] = []
+    /// 一度調べた番号。ジョブの子孫かどうかは、プロセスが生きているあいだは変わらない
+    private var checked: Set<pid_t> = []
+    private let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
+
+    init(root: pid_t) {
+        self.root = root
+        // `claude -p` は数秒で終わることもあるので、細かく見る
+        timer.schedule(deadline: .now(), repeating: .milliseconds(300))
+        timer.setEventHandler { [weak self] in self?.scan() }
+        timer.resume()
+    }
+
+    /// 見るのをやめて、見つけた会話を見つけた順に返す
+    func stop() -> [String] {
+        timer.cancel()
+        lock.lock()
+        defer { lock.unlock() }
+        return found
+    }
+
+    private func scan() {
+        let files =
+            (try? FileManager.default.contentsOfDirectory(at: Paths.claudeSessions, includingPropertiesForKeys: nil))
+            ?? []
+        for file in files where file.pathExtension == "json" {
+            guard let pid = pid_t(file.deletingPathExtension().lastPathComponent) else { continue }
+            lock.lock()
+            let seen = checked.contains(pid)
+            checked.insert(pid)
+            lock.unlock()
+            guard !seen, Self.isDescendant(pid, of: root),
+                let data = try? Data(contentsOf: file),
+                let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                let session = object["sessionId"] as? String
+            else { continue }
+            lock.lock()
+            if !found.contains(session) { found.append(session) }
+            lock.unlock()
+        }
+    }
+
+    /// pid の親を辿って root に行き着くか。`exec claude` なら pid が root そのもの
+    static func isDescendant(_ pid: pid_t, of root: pid_t) -> Bool {
+        var current = pid
+        for _ in 0..<64 {
+            if current == root { return true }
+            guard current > 1 else { return false }
+            var info = proc_bsdinfo()
+            let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+            guard proc_pidinfo(current, PROC_PIDTBSDINFO, 0, &info, size) == size else { return false }
+            current = pid_t(info.pbi_ppid)
+        }
+        return false
+    }
+}
+
 /// Claude Code のセッションの記録を読む
 enum Sessions {
+    /// 拾った会話のうち、最後に書かれたもの。報告はそこから取る
+    static func latest(_ sessions: [String], folder workdir: String) -> String? {
+        sessions.max { modified(workdir, $0) < modified(workdir, $1) }
+    }
+
+    private static func modified(_ workdir: String, _ session: String) -> Date {
+        let values = try? transcript(folder: workdir, session: session).resourceValues(forKeys: [
+            .contentModificationDateKey
+        ])
+        return values?.contentModificationDate ?? .distantPast
+    }
+
     /// Claude Code は実体のパスで置き場を決める。`/tmp` なら `/private/tmp`。
     /// Foundation の resolvingSymlinksInPath は逆に `/private` を剥がすので、realpath を使う
     static func folder(for workdir: String) -> URL {

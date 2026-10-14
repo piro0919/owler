@@ -30,10 +30,14 @@ enum Paths {
     static func plist(_ id: String) -> URL { launchAgents.appendingPathComponent("\(label(id)).plist") }
 
     /// Claude Code がセッションを置くフォルダ。設定フォルダを変えている人は CLAUDE_CONFIG_DIR に従う
-    static var claudeProjects: URL {
+    static var claudeProjects: URL { claudeBase.appendingPathComponent("projects") }
+
+    /// 動いている Claude Code が、プロセス番号ごとに会話の ID を書くフォルダ（`<番号>.json`）。終わると消える
+    static var claudeSessions: URL { claudeBase.appendingPathComponent("sessions") }
+
+    private static var claudeBase: URL {
         let env = ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"]
-        let base = env.map { URL(fileURLWithPath: $0) } ?? home.appendingPathComponent(".claude")
-        return base.appendingPathComponent("projects")
+        return env.map { URL(fileURLWithPath: $0) } ?? home.appendingPathComponent(".claude")
     }
 
     /// 作業フォルダから、Claude Code のセッションの置き場の名前を作る。
