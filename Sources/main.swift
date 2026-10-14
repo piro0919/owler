@@ -20,10 +20,7 @@ enum Dock {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let main = MainWindowController()
-    private var settingsWindow = SettingsWindowController()
-    private lazy var menuBar = MenuBar(
-        open: { [weak self] job in self?.main.show(job: job) },
-        openSettings: { [weak self] in self?.settingsWindow.show() })
+    private lazy var menuBar = MenuBar(open: { [weak self] job in self?.main.show(job: job) })
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = makeMenu()
@@ -39,10 +36,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 NSApp.mainMenu = self.makeMenu()
                 self.main.reloadLanguage()
-                let wasVisible = self.settingsWindow.window?.isVisible ?? false
-                self.settingsWindow.close()
-                self.settingsWindow = SettingsWindowController()
-                if wasVisible { self.settingsWindow.show() }
             }
         }
         // 閉じきるのは willClose のあとなので、一巡待ってから数える
@@ -57,9 +50,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if NSApp.keyWindow?.styleMask.contains(.titled) == true { Dock.show() }
             }
         }
-        main.show()
+        main.show(settings: CommandLine.arguments.contains("--settings"))
         Updater.shared.checkQuietly()
-        if CommandLine.arguments.contains("--settings") { settingsWindow.show() }
     }
 
     /// メニューバーに居るなら、窓を閉じても終わらない
@@ -67,7 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         !Preferences.showsMenuBar
     }
 
-    @objc func openSettings() { settingsWindow.show() }
+    @objc func openSettings() { main.show(settings: true) }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag { main.show() }

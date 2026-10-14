@@ -103,6 +103,52 @@ enum SelfTest {
             check(line(run(at(8, 9), 0)).hasPrefix(Strings.lastRun("")), "予定の回が無ければ前回を出す")
             check(line(nil).hasPrefix(Strings.noRuns + " · "), "まだ動いていないことも出す")
 
+            // 料金は Claude Code が書く cost-state の最後の合計
+            let jsonl = """
+                {"type":"assistant","message":{"content":[]}}
+                {"type":"cost-state","totalCostUSD":0.5}
+                {"type":"cost-state","totalCostUSD":1.25}
+                """
+            check(Sessions.cost(jsonl: jsonl) == 1.25, "料金は最後の cost-state の合計")
+            check(Sessions.cost(jsonl: "{\"type\":\"assistant\"}") == nil, "cost-state が無ければ料金は出さない")
+            check(Format.usd(0.0704) == "$0.07" && Format.usd(12.4) == "$12", "1ドル未満は2桁、10ドル以上は整数")
+            var weekly = daily
+            weekly.schedule = [Job.Slot(hour: 9, minute: 0, weekday: 1)]
+            check(daily.runsPerMonth == 30 && abs(weekly.runsPerMonth - 30.0 / 7) < 0.001, "月の回数は毎日30回、週1なら約4回")
+
+            // 報告の Markdown
+            check(
+                Markdown.blocks("# 題\n\n本文\n続き\n- 点\n  - 深い\n1. 一\n```\nlet a = 1\n```\n---")
+                    == [
+                        .heading(level: 1, text: "題"), .paragraph("本文\n続き"),
+                        .item(marker: "•", depth: 0, text: "点"), .item(marker: "•", depth: 1, text: "深い"),
+                        .item(marker: "1.", depth: 0, text: "一"), .code("let a = 1"), .rule,
+                    ],
+                "報告の Markdown を行ごとに見分ける")
+            check(String(Markdown.inline("**太字**と`コード`").characters) == "太字とコード", "行の中の記号は外す")
+
+            // 等間隔の時刻はまとめる
+            let clock = { (m: Int) in "\(m / 60):\(String(format: "%02d", m % 60))" }
+            let every20 = Array(stride(from: 9 * 60, to: 24 * 60, by: 20)) + [0, 20, 40]
+            check(
+                Job.interval(every20.sorted(), ja: true, time: clock) == "9:00〜0:40 の20分おき",
+                "日をまたぐ20分おきをまとめる")
+            check(
+                Job.interval([43, 583, 763, 943, 1123, 1303], ja: true, time: clock) == "9:43〜0:43 の3時間おき",
+                "3時間おきをまとめる")
+            check(Job.interval([540, 600, 615, 700], ja: true, time: clock) == nil, "間隔が揃っていなければまとめない")
+            check(Job.interval([540, 600], ja: true, time: clock) == nil, "少なければまとめない")
+
+            // メニューは次に動く順。同じ時刻なら ID の順
+            var early = daily
+            early.id = "z"
+            early.schedule = [Job.Slot(hour: 8, minute: 0, weekday: nil)]
+            var same = daily
+            same.id = "b"
+            check(
+                MenuBar.ordered([same, daily, early], now: now, calendar: calendar).map(\.id) == ["z", "a", "b"],
+                "メニューは次に動く順に並べる")
+
             // 見に来てほしいジョブ
             var watched = daily
             watched.review = true
@@ -113,6 +159,14 @@ enum SelfTest {
             check(!watched.awaitsReview(nil), "まだ動いていなければ印を出さない")
             done.seen = now
             check(!watched.awaitsReview(done), "開いた回には印を出さない")
+
+            check(
+                Strings.reviewCondition(watched)
+                    == Strings.t("未読にするとき：うまく終わるたび", "Marked unread: after every successful run"), "--review は毎回と書く")
+            var drafts = daily
+            drafts.reviewWhen = "返信の下書きを作ったとき"
+            check(Strings.reviewCondition(drafts).hasSuffix("返信の下書きを作ったとき"), "頼むジョブは書いた一文を出す")
+            check(Strings.reviewCondition(daily) == Strings.t("未読にするとき：なし", "Marked unread: never"), "どちらでもなければ、なしと書く")
 
             // ジョブが自分で見に来てほしいと伝えた回
             var asked = run(at(10, 9), 0)

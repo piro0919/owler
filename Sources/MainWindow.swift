@@ -13,10 +13,13 @@ final class Model: ObservableObject {
     @Published var selectedJob: String? {
         didSet {
             guard selectedJob != oldValue else { return }
+            if selectedJob != nil { showsSettings = false }
             openedRunID = nil
             loadRuns()
         }
     }
+    /// 右側に設定のページを出しているか。出すときはジョブの選択を外す。一覧の選択と右側が食い違わないように
+    @Published var showsSettings = false
     /// 開いている回。nil ならジョブのページ
     @Published var openedRunID: String? {
         didSet { if openedRunID != nil { markSeen() } }
@@ -25,6 +28,8 @@ final class Model: ObservableObject {
     @Published private(set) var tick = 0
     /// 終わった回の報告。記録は数 MB になるので、描くたびに読まない
     private var reports: [String: String?] = [:]
+    /// 終わった回の料金。報告と同じく一度読んだら覚えておく
+    private var costs: [String: Double?] = [:]
 
     private var timer: Timer?
 
@@ -67,12 +72,38 @@ final class Model: ObservableObject {
         return reply
     }
 
+    /// その回の料金。Claude Code の会話が紐づいていなければ nil
+    func cost(job: Job, run: RunRecord) -> Double? {
+        guard let session = run.session, run.end != nil else { return nil }
+        if let cached = costs[session] { return cached }
+        let cost = Sessions.cost(in: Sessions.transcript(folder: Paths.expand(job.folder), session: session))
+        costs[session] = cost
+        return cost
+    }
+
+    /// 1回あたりの料金の平均。表に出している回のうち、料金の分かる回で数える
+    func averageCost(job: Job) -> Double? {
+        let known = runs.compactMap { cost(job: job, run: $0) }
+        return known.isEmpty ? nil : known.reduce(0, +) / Double(known.count)
+    }
+
     /// 見に来てほしいジョブの、開いた回を見たことにする。ジョブのページでは最新の回。
     /// ジョブを選んだだけでは見たことにしない。ジョブのページには報告が出ないので、読まずに印が消える
     func markSeen() {
         guard let job, let run, !job.seenByOpening(run, among: runs).isEmpty else { return }
         RunStore.markSeen(job, opening: run)
         reload()
+    }
+
+    /// 開いている回の隣の回。runs は新しい順なので、-1 が新しい回、+1 が古い回。端なら nil
+    func adjacentRun(_ offset: Int) -> RunRecord? {
+        guard let index = runs.firstIndex(where: { $0.id == openedRunID }), runs.indices.contains(index + offset)
+        else { return nil }
+        return runs[index + offset]
+    }
+
+    func openAdjacentRun(_ offset: Int) {
+        if let run = adjacentRun(offset) { openedRunID = run.id }
     }
 
     func runNow(_ id: String) {
@@ -85,6 +116,11 @@ final class Model: ObservableObject {
         guard let job else { return }
         markSeen()
         Editor.installed?.open(job: job, run: run)
+    }
+
+    func openSettings() {
+        selectedJob = nil
+        showsSettings = true
     }
 
     func newJob() {
@@ -109,9 +145,9 @@ struct MainView: View {
                     Button(Strings.runNow) { model.runNow(job.id) }
                 }
             }
-            .navigationSplitViewColumnWidth(min: 240, ideal: 260, max: 360)
+            .navigationSplitViewColumnWidth(min: 280, ideal: 290, max: 360)
             // 開閉のボタンを外すと、列の幅の指定だけでは細く畳まれる。一覧にも幅を持たせる
-            .frame(minWidth: 240)
+            .frame(minWidth: 280)
             // 一覧を畳む場面が無いので、開閉のボタンは出さない
             .toolbar(removing: .sidebarToggle)
             .overlay {
@@ -133,13 +169,23 @@ struct MainView: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
                     Spacer()
+                    // 設定は本体の窓の中に出す。別の窓だった頃は、窓が2枚あって邪魔だと言われた
+                    Button(action: model.openSettings) {
+                        Image(systemName: "gearshape")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(model.showsSettings ? .primary : .secondary)
+                    .help(Strings.settingsTitle)
+                    .accessibilityLabel(Strings.settingsTitle)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
             }
         } detail: {
             Group {
-                if let job = model.job {
+                if model.showsSettings {
+                    SettingsPage()
+                } else if let job = model.job {
                     if let run = model.openedRun {
                         RunPage(model: model, job: job, run: run)
                     } else {
@@ -165,7 +211,8 @@ struct JobPage: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Header(title: job.displayName, subtitle: subtitle) {
+                // 時刻の並びが長いジョブでは1行目が折り返すので、つなげずに行を分ける
+                Header(title: job.displayName, subtitle: subtitle, note: Strings.reviewCondition(job)) {
                     OpenButton(model: model)
                 }
                 Card {
@@ -190,7 +237,9 @@ struct JobPage: View {
 
     private var subtitle: String {
         let next = job.nextFire().map { Strings.nextRun(Format.dateTime($0)) }
-        return [job.scheduleText, next].compactMap { $0 }.joined(separator: " · ")
+        // 記録は100回で消えるので、頻繁なジョブでは月の合計を数えられない。1回の平均と予定の回数から見込む
+        let cost = model.averageCost(job: job).map { Strings.costPerRun($0, month: $0 * job.runsPerMonth) }
+        return [job.scheduleText, next, cost].compactMap { $0 }.joined(separator: " · ")
     }
 }
 
@@ -242,15 +291,15 @@ struct RunPage: View {
                 .buttonStyle(.plain)
 
                 Header(title: Format.dateTime(run.start), subtitle: status, dot: run.state) {
-                    OpenButton(model: model)
+                    HStack(spacing: 8) {
+                        RunStepper(model: model)
+                        OpenButton(model: model)
+                    }
                 }
 
                 if let reply = model.report(job: job, run: run) {
                     Titled(Strings.report) {
-                        Text(reply)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(16)
+                        MarkdownView(reply).padding(16)
                     }
                 }
 
@@ -271,7 +320,9 @@ struct RunPage: View {
     private var status: String {
         let name = Strings.stateName(run)
         guard let end = run.end else { return name }
-        return "\(name) · \(Format.duration(end.timeIntervalSince(run.start)))"
+        let cost = model.cost(job: job, run: run).map(Strings.cost)
+        return [name, Format.duration(end.timeIntervalSince(run.start)), cost].compactMap { $0 }.joined(
+            separator: " · ")
     }
 }
 
@@ -279,6 +330,8 @@ struct RunPage: View {
 struct Header<Trailing: View>: View {
     let title: String
     let subtitle: String
+    /// 灰色の2行目。ジョブのページで、どんなときに未読にするかを出す
+    var note: String? = nil
     var dot: RunRecord.State? = nil
     @ViewBuilder let trailing: Trailing
 
@@ -293,6 +346,7 @@ struct Header<Trailing: View>: View {
                     if let dot { StateDot(state: dot) }
                     Text(subtitle).foregroundStyle(.secondary)
                 }
+                if let note { Text(note).foregroundStyle(.secondary) }
             }
             Spacer(minLength: 0)
             trailing
@@ -327,6 +381,32 @@ struct OpenButton: View {
             .buttonStyle(.borderedProminent)
             .disabled(Editor.installed == nil)
             .help(Editor.installed == nil ? Strings.noEditor : "")
+    }
+}
+
+/// 回のページで前後の回へ移る。並びは実行の表と同じで、∧ が新しい回、∨ が古い回。
+/// 毎回一覧に戻らないと隣の回を見られず不便だと言われた（2026-10-14）。↑↓ のキーでも移れる
+struct RunStepper: View {
+    @ObservedObject var model: Model
+
+    var body: some View {
+        HStack(spacing: 4) {
+            step("chevron.up", -1, .upArrow, Strings.newerRun)
+            step("chevron.down", 1, .downArrow, Strings.olderRun)
+        }
+        .controlSize(.large)
+    }
+
+    private func step(_ symbol: String, _ offset: Int, _ key: KeyEquivalent, _ label: String) -> some View {
+        Button {
+            model.openAdjacentRun(offset)
+        } label: {
+            Image(systemName: symbol).frame(width: 14)
+        }
+        .keyboardShortcut(key, modifiers: [])
+        .disabled(model.adjacentRun(offset) == nil)
+        .help(label)
+        .accessibilityLabel(label)
     }
 }
 
@@ -371,8 +451,8 @@ final class MainWindowController {
         window?.contentView = NSHostingView(rootView: MainView(model: model))
     }
 
-    /// job を渡すと、そのジョブを選んだ状態で出す
-    func show(job: String? = nil) {
+    /// job を渡すと、そのジョブを選んだ状態で出す。settings なら設定のページを出す
+    func show(job: String? = nil, settings: Bool = false) {
         if window == nil {
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 960, height: 600),
@@ -387,6 +467,7 @@ final class MainWindowController {
             self.window = window
         }
         model.reload()
+        if settings { model.openSettings() }
         if let job {
             model.selectedJob = job
             // メニューバーから開いたとき、まだ見に来ていない回があれば、いちばん新しいその回を開く（開けば見たことになる）

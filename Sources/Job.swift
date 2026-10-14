@@ -18,6 +18,9 @@ struct Job: Codable, Identifiable, Equatable {
     /// 終わった回を利用者に見に来てほしいジョブ。成功した回をまだ開いていなければ、メニューバーに印を出す。
     /// 裏で動いて成功すれば見なくてよいジョブにまで印を出すと、印の意味が薄れるので、ジョブごとに選ぶ
     var review: Bool?
+    /// ジョブが `OWLER_REVIEW_FILE` に書いて未読にするのは、どんなときか。Owler には中身が分からないので、
+    /// 足すときに一文で書いてもらい、窓に出す。「返信の下書きを作ったとき」など
+    var reviewWhen: String?
 
     /// 動かす時刻。曜日が無ければ毎日。曜日は launchd と同じく 0 と 7 が日曜
     struct Slot: Codable, Equatable, Hashable {
@@ -44,6 +47,11 @@ struct Job: Codable, Identifiable, Equatable {
     func seenByOpening(_ run: RunRecord, among runs: [RunRecord]) -> [RunRecord] {
         let older = review == true ? unseenRuns(runs).filter { $0.stamp < run.stamp && $0.asked != true } : []
         return (awaitsReview(run) ? [run] : []) + older
+    }
+
+    /// 30日に動く回数の見込み。曜日の決まった時刻は週に1回
+    var runsPerMonth: Double {
+        schedule.reduce(0) { $0 + ($1.weekday == nil ? 30 : 30.0 / 7) }
     }
 
     /// 画面に出す名前。説明があればそれ、無ければ ID
@@ -102,10 +110,13 @@ struct Job: Codable, Identifiable, Equatable {
         }
         let isGrid = slots.count == minutes.count * days.count && (days == [nil] || !days.contains(nil))
         if isGrid {
-            let times = minutes.map(time).joined(separator: ", ")
-            if days == [nil] { return ja ? "毎日 \(times)" : "Daily at \(times)" }
+            let interval = Self.interval(minutes, ja: ja, time: time)
+            let times = interval ?? minutes.map(time).joined(separator: ", ")
+            // 英語は「Daily at 9:00」と「Daily, every 20 min …」で前置きの形が変わる
+            let at = interval == nil ? " at " : ", "
+            if days == [nil] { return ja ? "毎日 \(times)" : "Daily\(at)\(times)" }
             let names = dayNames(days.compactMap { $0 }.sorted())
-            return ja ? "\(names) \(times)" : "\(names) at \(times)"
+            return ja ? "\(names) \(times)" : "\(names)\(at)\(times)"
         }
         return slots.sorted { ($0.weekday ?? -1, $0.hour, $0.minute) < ($1.weekday ?? -1, $1.hour, $1.minute) }
             .map { slot in
@@ -117,6 +128,26 @@ struct Job: Codable, Identifiable, Equatable {
     }
 
     var scheduleText: String { scheduleText() }
+
+    /// 等間隔の時刻を「9:00〜0:40 の20分おき」とまとめる。日をまたいでもよい（円の上で、間が1か所だけ空いている）。
+    /// 予約投稿のジョブで48個の時刻を並べ、見出しの下が5行に埋まっていた（2026-10-14）。4個より少なければまとめない
+    static func interval(_ minutes: [Int], ja: Bool, time: (Int) -> String) -> String? {
+        guard minutes.count >= 4 else { return nil }
+        let gaps = minutes.indices.map { i in
+            i + 1 < minutes.count ? minutes[i + 1] - minutes[i] : minutes[0] + 24 * 60 - minutes[i]
+        }
+        let step = gaps.min() ?? 0
+        let wide = gaps.indices.filter { gaps[$0] != step }
+        let every =
+            step % 60 == 0
+            ? (ja ? "\(step / 60)時間おき" : "every \(step / 60) h") : (ja ? "\(step)分おき" : "every \(step) min")
+        // 一日じゅう等間隔なら、始まりも終わりも無い
+        if wide.isEmpty { return every }
+        guard wide.count == 1 else { return nil }
+        let first = minutes[(wide[0] + 1) % minutes.count]
+        let last = minutes[wide[0]]
+        return ja ? "\(time(first))〜\(time(last)) の\(every)" : "\(every) from \(time(first)) to \(time(last))"
+    }
 }
 
 /// 時刻と曜日の書き方を読む。`--at 10:00` と `--weekdays 1-5` から Slot を作る

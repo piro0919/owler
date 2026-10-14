@@ -76,13 +76,29 @@ enum Strings {
     static var settings: String { t("設定…", "Settings…") }
     static var settingsTitle: String { t("設定", "Settings") }
     static var quit: String { t("Owler を終了", "Quit Owler") }
+    static func cost(_ value: Double) -> String { t("約 \(Format.usd(value))", "about \(Format.usd(value))") }
+    static func costPerRun(_ perRun: Double, month: Double) -> String {
+        t(
+            "1回 約 \(Format.usd(perRun)) · 月 約 \(Format.usd(month))",
+            "About \(Format.usd(perRun)) a run · \(Format.usd(month)) a month")
+    }
+    static var updates: String { t("アップデート", "Updates") }
     static var language: String { t("言語", "Language") }
     static var launchAtLogin: String { t("ログイン時に起動", "Launch at Login") }
     static var launchFailed: String { t("ログイン時の起動を切り替えられませんでした", "Could not change Launch at Login") }
-    static var checkForUpdates: String { t("アップデートを確認", "Check for Updates") }
+    /// 項目名が「アップデート」なので、ボタンは「確認」だけにする。並べると同じ言葉が2回出た
+    static var checkForUpdates: String { t("確認", "Check") }
     static var showInMenuBar: String { t("メニューバーに表示", "Show in Menu Bar") }
     static func runningJobs(_ n: Int) -> String { t("実行中の定期実行 \(n) 件", "\(n) job(s) running") }
     static func unseenJobs(_ n: Int) -> String { t("まだ見ていない回のある定期実行 \(n) 件", "\(n) job(s) with a run to review") }
+    /// ジョブのページの2行目。どんなときに未読にするか。--review なら毎回なので、書いた一文より先に見る
+    static func reviewCondition(_ job: Job) -> String {
+        if job.review == true { return t("未読にするとき：うまく終わるたび", "Marked unread: after every successful run") }
+        if let when = job.reviewWhen, !when.isEmpty { return t("未読にするとき：\(when)", "Marked unread: \(when)") }
+        return t("未読にするとき：なし", "Marked unread: never")
+    }
+    static var newerRun: String { t("新しい回", "Newer Run") }
+    static var olderRun: String { t("古い回", "Older Run") }
     static var unseenHeader: String { t("未読", "Unread") }
     static var otherJobsHeader: String { t("ほかの定期実行", "Other Jobs") }
     static func failedJobs(_ n: Int) -> String { t("前回が失敗の定期実行 \(n) 件", "\(n) job(s) failed last time") }

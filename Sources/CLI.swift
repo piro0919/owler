@@ -5,7 +5,8 @@ enum CLI {
     static let usage = """
         Usage:
           owler add <id> --folder <dir> --at <HH:MM> [--at <HH:MM>...] [--weekdays <days>]
-                    [--summary <text>] [--also-log <file>] [--review] -- <command> [args...]
+                    [--summary <text>] [--also-log <file>] [--review] [--review-when <text>]
+                    -- <command> [args...]
               Register a job and load it into launchd. <id> is lowercase letters, digits and '-'.
               <days> is like 1-5 or 0,6 (0 = Sunday). Omit it to run every day.
               Re-running add with the same <id> replaces the job. Times are local time.
@@ -13,6 +14,8 @@ enum CLI {
               Use it for jobs whose results you want to come and read, not for jobs that just need to succeed.
               Any job can also ask for the dot on a single run: Owler passes a file path in $OWLER_REVIEW_FILE,
               and if the job writes anything to it, that run gets the dot when it succeeds.
+              If the job does this, say when with --review-when, in the language the user speaks, such as
+              --review-when "返信の下書きを作ったとき". The Owler window shows it on the job's page.
               A bare command name such as `claude` is resolved to its full path through your PATH now,
               because launchd runs jobs with a minimal PATH.
           owler import <plist> --id <id> [--folder <dir>] [--summary <text>]
@@ -106,7 +109,9 @@ enum CLI {
     static func add(_ args: [String]) -> Int32 {
         guard let o = parse(args), let id = o.positional.first, let folder = o.one("folder"), !o.tail.isEmpty
         else { return fail(usage) }
-        if let unknown = o.unknown(allowed: ["folder", "at", "weekdays", "summary", "also-log", "review"]) {
+        if let unknown = o.unknown(allowed: [
+            "folder", "at", "weekdays", "summary", "also-log", "review", "review-when",
+        ]) {
             return fail("Unknown option --\(unknown)")
         }
         guard let executable = resolve(o.tail[0]) else {
@@ -127,7 +132,8 @@ enum CLI {
             command: [executable] + o.tail.dropFirst(),
             schedule: ScheduleParser.slots(times: times.compactMap { $0 }, weekdays: weekdays),
             alsoLogTo: o.one("also-log").map(absolute),
-            review: o.one("review") == nil ? nil : true)
+            review: o.one("review") == nil ? nil : true,
+            reviewWhen: o.one("review-when"))
         let addsReview = job.review == true && JobStore.load(id)?.review != true
         let status = install(job)
         // あとから --review を付けたジョブは、それまでの回を見たことにする。でないと付けた途端に過去の回すべてに印が付く

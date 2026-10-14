@@ -32,11 +32,9 @@ final class MenuBar: NSObject, NSMenuDelegate {
     private var running = 0
     private var unseen = 0
     private let open: (String?) -> Void
-    private let openSettings: () -> Void
 
-    init(open: @escaping (String?) -> Void, openSettings: @escaping () -> Void) {
+    init(open: @escaping (String?) -> Void) {
         self.open = open
-        self.openSettings = openSettings
         super.init()
     }
 
@@ -68,9 +66,9 @@ final class MenuBar: NSObject, NSMenuDelegate {
         }
     }
 
-    /// 各ジョブの前回と、まだ見に来ていない回があるか
+    /// 各ジョブの前回と、まだ見に来ていない回があるか。メニューの並び（次に動く順）で返す
     private func lastRuns() -> [(Job, RunRecord?, Bool)] {
-        JobStore.all().map { ($0, RunStore.all($0.id, limit: 1).first, !RunStore.unseen($0).isEmpty) }
+        Self.ordered(JobStore.all()).map { ($0, RunStore.all($0.id, limit: 1).first, !RunStore.unseen($0).isEmpty) }
     }
 
     private func refresh() {
@@ -155,7 +153,6 @@ final class MenuBar: NSObject, NSMenuDelegate {
         }
         menu.addItem(.separator())
         menu.addItem(action(Strings.openOwler, #selector(openWindow)))
-        menu.addItem(action(Strings.settings, #selector(settings)))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: Strings.quit, action: #selector(NSApp.terminate), keyEquivalent: "q"))
         refresh()
@@ -175,6 +172,21 @@ final class MenuBar: NSObject, NSMenuDelegate {
             item.title = "\(job.displayName)  —  \(line)"
         }
         return item
+    }
+
+    /// メニューの並び。次に動く順。2行目に次回を出すので、上から時刻が並ぶ。
+    /// ID の順だった頃は、画面に出るのが日本語の説明なので規則が見えず、ランダムに見えると言われた（2026-10-14）。
+    /// 窓の一覧は選んだ行が時刻のたびに動くと使いにくいので、ID の順のまま
+    nonisolated static func ordered(_ jobs: [Job], now: Date = Date(), calendar: Calendar = .current) -> [Job] {
+        let next = Dictionary(uniqueKeysWithValues: jobs.map { ($0.id, $0.nextFire(after: now, calendar: calendar)) })
+        return jobs.sorted {
+            switch (next[$0.id] ?? nil, next[$1.id] ?? nil) {
+            case (let a?, let b?) where a != b: a < b
+            case (_?, nil): true
+            case (nil, _?): false
+            default: $0.id < $1.id
+            }
+        }
     }
 
     /// 各ジョブの2行目。前回の成功は丸の色で分かるので書かず、失敗・中断・実行中だけを言葉で添える。
@@ -208,7 +220,6 @@ final class MenuBar: NSObject, NSMenuDelegate {
 
     @objc private func openJob(_ sender: NSMenuItem) { open(sender.representedObject as? String) }
     @objc private func openWindow() { open(nil) }
-    @objc private func settings() { openSettings() }
 
     /// フクロウの影絵。テンプレート画像にして、明暗の色付けは macOS に任せる
     private static let statusIcon: NSImage? = {

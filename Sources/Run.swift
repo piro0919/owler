@@ -350,6 +350,24 @@ enum Sessions {
         return isNonInteractive(head: head)
     }
 
+    /// その会話にかかった料金。Claude Code が記録に書く `cost-state` の合計（totalCostUSD）の最後のもの。
+    /// 料金表を Owler で持たずに済む。会話が終わるまでは書かれないので、動いている回は nil
+    static func cost(in transcript: URL) -> Double? {
+        guard let data = try? Data(contentsOf: transcript) else { return nil }
+        return cost(jsonl: String(decoding: data, as: UTF8.self))
+    }
+
+    static func cost(jsonl: String) -> Double? {
+        for line in jsonl.split(separator: "\n").reversed() where line.contains("\"cost-state\"") {
+            guard let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+                object["type"] as? String == "cost-state",
+                let total = object["totalCostUSD"] as? Double
+            else { continue }
+            return total
+        }
+        return nil
+    }
+
     static func isNonInteractive(head: String) -> Bool {
         head.contains("\"entrypoint\":\"sdk-")
     }

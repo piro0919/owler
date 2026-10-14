@@ -38,6 +38,12 @@ enum Format {
     }
 
     /// かかった時間。日本語なら 6秒・1分5秒、英語なら 6s・1m 5s
+    /// 料金。Claude Code の会話記録にある見積もり（API の値段で数えたもの）。1ドル未満は2桁、10ドル以上は整数
+    static func usd(_ value: Double) -> String {
+        if value >= 10 { return "$\(Int(value.rounded()))" }
+        return String(format: "$%.2f", value)
+    }
+
     static func duration(_ seconds: TimeInterval, locale: Locale = Strings.locale) -> String {
         let formatter = DateComponentsFormatter()
         var calendar = Calendar(identifier: .gregorian)
