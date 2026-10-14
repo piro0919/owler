@@ -71,7 +71,10 @@ command.
 
 When a job starts `claude -p` in its folder, Owler finds the Claude Code
 transcript written during the run and links it to the run. The window shows
-Claude's last message as the run's report.
+Claude's last message as the run's report, along with what the run cost as
+Claude Code counts it. A job's page shows the average per run and what that
+comes to over a month on its schedule. On a run's page, the arrow buttons
+next to the title, or the ↑ and ↓ keys, step to the newer or older run.
 
 The Claude Code extension does not reopen sessions created by `claude -p`, so
 **Open in Claude Code** starts a new conversation and puts the transcript and
@@ -81,8 +84,10 @@ you like, and send it.
 ## Menu bar
 
 Owler also sits in the menu bar, listing each job with the result of its last
-run. A number next to the owl counts the jobs whose last run failed. Turn it off
-in **Settings…** if you only want the window.
+run and when it runs next, in the order the jobs run next. A number next to the owl
+counts the jobs whose last run failed. Turn it off
+in the settings (the gear at the bottom of the job list, or ⌘,) if you only want
+the window.
 
 Some jobs are there for you to read, such as a morning digest written by
 `claude -p`. Add them with `--review`, and after each successful run a dot
@@ -97,6 +102,8 @@ A job can also ask for the dot on a single run. Owler passes a file path in
 dot, with or without `--review`. Each of these runs keeps its dot until you
 open that run itself. A job that only needs you now and then, such as
 one that drafts replies for you to approve, can stay quiet the rest of the time.
+Add it with `--review-when "<when>"` so its page in the window says when to
+expect it.
 
 ## Building
 

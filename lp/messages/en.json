@@ -32,7 +32,7 @@
       },
       {
         "title": "AI reports",
-        "body": "When a job runs Claude Code, its last message is shown with the run."
+        "body": "When a job runs Claude Code, its last message is shown with the run, along with roughly what it cost."
       },
       {
         "title": "Cursor and VS Code",
@@ -44,7 +44,7 @@
       },
       {
         "title": "Menu bar",
-        "body": "The latest result of each job, with a count of failures. Jobs you want to come back and read, or a single run that asks for you, are marked until you open them."
+        "body": "The latest result and next run of each job, in the order they run next, with a count of failures. Jobs with a result you haven't read yet are grouped at the top and marked until you open them."
       }
     ]
   },
