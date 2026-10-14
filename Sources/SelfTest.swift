@@ -170,12 +170,12 @@ enum SelfTest {
             check(!watched.awaitsReview(done), "開いた回には印を出さない")
 
             check(
-                Strings.reviewCondition(watched)
-                    == Strings.t("未読にするとき：うまく終わるたび", "Marked unread: after every successful run"), "--review は毎回と書く")
+                Strings.reviewCondition(watched) == Strings.t("うまく終わるたび", "After every successful run"),
+                "--review は毎回と書く")
             var drafts = daily
             drafts.reviewWhen = "返信の下書きを作ったとき"
-            check(Strings.reviewCondition(drafts).hasSuffix("返信の下書きを作ったとき"), "頼むジョブは書いた一文を出す")
-            check(Strings.reviewCondition(daily) == Strings.t("未読にするとき：なし", "Marked unread: never"), "どちらでもなければ、なしと書く")
+            check(Strings.reviewCondition(drafts) == "返信の下書きを作ったとき", "頼むジョブは書いた一文を出す")
+            check(Strings.reviewCondition(daily) == Strings.t("なし", "Never"), "どちらでもなければ、なしと書く")
 
             // ジョブが自分で見に来てほしいと伝えた回
             var asked = run(at(10, 9), 0)

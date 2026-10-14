@@ -91,12 +91,16 @@ enum Strings {
     static var showInMenuBar: String { t("メニューバーに表示", "Show in Menu Bar") }
     static func runningJobs(_ n: Int) -> String { t("実行中の定期実行 \(n) 件", "\(n) job(s) running") }
     static func unseenJobs(_ n: Int) -> String { t("まだ見ていない回のある定期実行 \(n) 件", "\(n) job(s) with a run to review") }
-    /// ジョブのページの2行目。どんなときに未読にするか。--review なら毎回なので、書いた一文より先に見る
+    /// ジョブのページの「未読」の項目。どんなときに未読にするか。--review なら毎回なので、書いた一文より先に見る
     static func reviewCondition(_ job: Job) -> String {
-        if job.review == true { return t("未読にするとき：うまく終わるたび", "Marked unread: after every successful run") }
-        if let when = job.reviewWhen, !when.isEmpty { return t("未読にするとき：\(when)", "Marked unread: \(when)") }
-        return t("未読にするとき：なし", "Marked unread: never")
+        if job.review == true { return t("うまく終わるたび", "After every successful run") }
+        if let when = job.reviewWhen, !when.isEmpty { return when }
+        return t("なし", "Never")
     }
+    static var scheduleLabel: String { t("予定", "Schedule") }
+    static var nextLabel: String { t("次回", "Next") }
+    static var costLabel: String { t("料金", "Cost") }
+    static var unseenLabel: String { t("未読", "Unread") }
     static var newerRun: String { t("新しい回", "Newer Run") }
     static var olderRun: String { t("古い回", "Older Run") }
     static var unseenHeader: String { t("未読", "Unread") }

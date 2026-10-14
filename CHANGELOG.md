@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- A job's page lists its schedule, next run, cost and when it is marked unread on separate labeled lines, instead of one wrapped line
+
 ## [0.1.12]
 
 - A job's monthly cost estimate now counts only the share of runs where Claude actually ran. A job that skips weekends was estimated as if it ran Claude every day

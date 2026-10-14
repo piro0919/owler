@@ -210,8 +210,7 @@ struct JobPage: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                // 時刻の並びが長いジョブでは1行目が折り返すので、つなげずに行を分ける
-                Header(title: job.displayName, subtitle: subtitle, note: Strings.reviewCondition(job)) {
+                Header(title: job.displayName, details: details) {
                     OpenButton(model: model)
                 }
                 Card {
@@ -234,11 +233,17 @@ struct JobPage: View {
         }
     }
 
-    private var subtitle: String {
-        let next = job.nextFire().map { Strings.nextRun(Format.dateTime($0)) }
+    /// 見出しの下の項目。予定・次回・料金を「·」で1行につないでいた頃は、折り返して「月 約 $14」が割れ、
+    /// ごちゃついて見えると言われた（2026-10-14）。項目名を左に揃え、1項目1行にした
+    private var details: [(String, String)] {
+        var rows = [(Strings.scheduleLabel, job.scheduleText)]
+        if let next = job.nextFire() { rows.append((Strings.nextLabel, Format.dateTime(next))) }
         // 記録は100回で消えるので、頻繁なジョブでは月の合計を数えられない。1回の平均と予定の回数から見込む
-        let cost = model.costEstimate(job: job).map { Strings.costPerRun($0.perRun, month: $0.month) }
-        return [job.scheduleText, next, cost].compactMap { $0 }.joined(separator: " · ")
+        if let cost = model.costEstimate(job: job) {
+            rows.append((Strings.costLabel, Strings.costPerRun(cost.perRun, month: cost.month)))
+        }
+        rows.append((Strings.unseenLabel, Strings.reviewCondition(job)))
+        return rows
     }
 }
 
@@ -328,9 +333,9 @@ struct RunPage: View {
 /// 大きな見出しと、灰色の1行。右にボタンを置く
 struct Header<Trailing: View>: View {
     let title: String
-    let subtitle: String
-    /// 灰色の2行目。ジョブのページで、どんなときに未読にするかを出す
-    var note: String? = nil
+    var subtitle: String = ""
+    /// 項目名つきの行。ジョブのページで、予定・次回・料金・未読にするときを並べる
+    var details: [(String, String)] = []
     var dot: RunRecord.State? = nil
     @ViewBuilder let trailing: Trailing
 
@@ -341,11 +346,22 @@ struct Header<Trailing: View>: View {
                     .font(.system(size: 24, weight: .bold))
                     .monospacedDigit()
                     .lineLimit(2)
-                HStack(spacing: 6) {
-                    if let dot { StateDot(state: dot) }
-                    Text(subtitle).foregroundStyle(.secondary)
+                if !subtitle.isEmpty {
+                    HStack(spacing: 6) {
+                        if let dot { StateDot(state: dot) }
+                        Text(subtitle).foregroundStyle(.secondary)
+                    }
                 }
-                if let note { Text(note).foregroundStyle(.secondary) }
+                if !details.isEmpty {
+                    Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 4) {
+                        ForEach(details, id: \.0) { label, value in
+                            GridRow {
+                                Text(label).foregroundStyle(.tertiary)
+                                Text(value).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
             }
             Spacer(minLength: 0)
             trailing
