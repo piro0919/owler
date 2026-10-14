@@ -58,7 +58,6 @@ enum Strings {
     static var noJobsHint: String {
         t("「新しい定期実行」から Claude Code に相談して足せます", "Use New Job to set one up with Claude Code")
     }
-    static var selectJob: String { t("定期実行を選んでください", "Select a job") }
     static var newJob: String { t("新しい定期実行", "New Job") }
     static var runNow: String { t("今すぐ実行", "Run Now") }
     static var openInEditor: String { t("Claude Code で開く", "Open in Claude Code") }

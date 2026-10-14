@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- The window no longer says "Select a job" when no job is selected
+
 ## [0.1.13]
 
 - A job's page lists its schedule, next run, cost and when it is marked unread on separate labeled lines, instead of one wrapped line

@@ -190,9 +190,8 @@ struct MainView: View {
                     } else {
                         JobPage(model: model, job: job)
                     }
-                } else {
-                    Text(Strings.selectJob).foregroundStyle(.secondary)
                 }
+                // ジョブを選んでいないときは何も出さない。「定期実行を選んでください」は要らないと言われた（2026-10-14）
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(Color(nsColor: .windowBackgroundColor))
