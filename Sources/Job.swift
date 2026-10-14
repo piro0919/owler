@@ -54,6 +54,22 @@ struct Job: Codable, Identifiable, Equatable {
         schedule.reduce(0) { $0 + ($1.weekday == nil ? 30 : 30.0 / 7) }
     }
 
+    struct CostEstimate: Equatable {
+        var perRun: Double
+        var month: Double
+    }
+
+    /// 終わった回の料金（Claude が動かなかった回は nil）から、1回あたりと月の見込みを出す。
+    /// 1回あたりは Claude が動いた回の平均。月は、予定の回数に Claude が動いた回の割合を掛ける。
+    /// 割合を掛けないと、土日は抜けるジョブ（Spatto）で、動かない日まで数えて8割増しに見込んでいた（2026-10-14）
+    func costEstimate(_ costs: [Double?]) -> CostEstimate? {
+        let known = costs.compactMap { $0 }
+        guard !known.isEmpty else { return nil }
+        let perRun = known.reduce(0, +) / Double(known.count)
+        let share = Double(known.count) / Double(costs.count)
+        return CostEstimate(perRun: perRun, month: perRun * runsPerMonth * share)
+    }
+
     /// 画面に出す名前。説明があればそれ、無ければ ID
     var displayName: String { summary.isEmpty ? id : summary }
 

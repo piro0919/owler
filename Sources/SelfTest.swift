@@ -119,6 +119,10 @@ enum SelfTest {
             check(Format.usd(0.0704) == "$0.07" && Format.usd(12.4) == "$12", "1ドル未満は2桁、10ドル以上は整数")
             var weekly = daily
             weekly.schedule = [Job.Slot(hour: 9, minute: 0, weekday: 1)]
+            check(
+                daily.costEstimate([2, nil, 4, nil]) == Job.CostEstimate(perRun: 3, month: 45),
+                "月の見込みは、Claude が動いた回の割合を掛ける")
+            check(daily.costEstimate([nil, nil]) == nil, "Claude が一度も動いていなければ出さない")
             check(daily.runsPerMonth == 30 && abs(weekly.runsPerMonth - 30.0 / 7) < 0.001, "月の回数は毎日30回、週1なら約4回")
 
             // 報告の Markdown

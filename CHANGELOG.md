@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- A job's monthly cost estimate now counts only the share of runs where Claude actually ran. A job that skips weekends was estimated as if it ran Claude every day
+
 ## [0.1.11]
 
 - A run is now linked only to the Claude Code conversation that the job itself started. Before, two jobs sharing a folder could pick up each other's conversation when their runs overlapped, so a job that never runs Claude could show another job's report and cost

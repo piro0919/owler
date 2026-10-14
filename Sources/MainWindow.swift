@@ -81,10 +81,9 @@ final class Model: ObservableObject {
         return cost
     }
 
-    /// 1回あたりの料金の平均。表に出している回のうち、料金の分かる回で数える
-    func averageCost(job: Job) -> Double? {
-        let known = runs.compactMap { cost(job: job, run: $0) }
-        return known.isEmpty ? nil : known.reduce(0, +) / Double(known.count)
+    /// 1回あたりの料金と月の見込み。表に出している回のうち、終わった回で数える
+    func costEstimate(job: Job) -> Job.CostEstimate? {
+        job.costEstimate(runs.filter { $0.end != nil }.map { cost(job: job, run: $0) })
     }
 
     /// 見に来てほしいジョブの、開いた回を見たことにする。ジョブのページでは最新の回。
@@ -238,7 +237,7 @@ struct JobPage: View {
     private var subtitle: String {
         let next = job.nextFire().map { Strings.nextRun(Format.dateTime($0)) }
         // 記録は100回で消えるので、頻繁なジョブでは月の合計を数えられない。1回の平均と予定の回数から見込む
-        let cost = model.averageCost(job: job).map { Strings.costPerRun($0, month: $0 * job.runsPerMonth) }
+        let cost = model.costEstimate(job: job).map { Strings.costPerRun($0.perRun, month: $0.month) }
         return [job.scheduleText, next, cost].compactMap { $0 }.joined(separator: " · ")
     }
 }
