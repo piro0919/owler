@@ -14,8 +14,12 @@ Claude Code のデスクトップアプリにもローカルの定期実行は�
 - launchd のラベルは `io.kkweb.owler.job.<id>`。これで始まるものだけを Owler のジョブとみなす
 - plist はコマンドを直接呼ばず、`Owler run <id>` を呼ぶ。Owler が開始・終了・終了コードを
   `runs/<id>/<stamp>.json` に、出力を同じ名前の `.log` に残してからコマンドを動かす
-- 実行の間に、作業フォルダで作られた Claude Code のセッション（`~/.claude/projects/<フォルダ名>/*.jsonl`）を
-  その回に紐づける。窓には最後の Claude の発言を「Claude の報告」として出す
+- ジョブが起こした Claude Code のセッション（`~/.claude/projects/<フォルダ名>/*.jsonl`）をその回に紐づける。
+  Claude Code は動いているあいだ `~/.claude/sessions/<番号>.json` にプロセスの番号と会話の ID を書き、終わると消す
+  （`claude -p` も同じ）。`Owler run` はジョブが動いているあいだ 0.3 秒ごとにそこを見て、親を辿ってジョブのプロセスに
+  行き着く番号の会話だけを拾う（`SessionWatcher`、2026-10-14）。作業フォルダと時刻だけで探していた頃は、同じフォルダの
+  別のジョブの会話を取り違えた。予約投稿のジョブ（Claude を使わない）の 0:40 の回が長引き、0:43 に始まった返信の
+  ジョブの会話と報告がそこに付いていた。`sessions/` が無い古い Claude Code だけは、フォルダと時刻で探す。窓には最後の Claude の発言を「Claude の報告」として出す
   - 置き場の名前は実体のパスの英数字以外を `-` にしたもの。`/tmp` は `/private/tmp` になる。
     Foundation の resolvingSymlinksInPath は逆に `/private` を剥がすので realpath を使う
   - スクリプトの中で別のフォルダへ移ってから claude を呼ぶと見つからない

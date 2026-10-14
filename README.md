@@ -70,7 +70,9 @@ command.
 ## How a run is linked to Claude Code
 
 When a job starts `claude -p` in its folder, Owler finds the Claude Code
-transcript written during the run and links it to the run. The window shows
+transcript of that process and links it to the run. Only Claude Code started by
+the job itself counts, so two jobs sharing a folder don't pick up each other's
+conversations. The window shows
 Claude's last message as the run's report, along with what the run cost as
 Claude Code counts it. A job's page shows the average per run and what that
 comes to over a month on its schedule. On a run's page, the arrow buttons

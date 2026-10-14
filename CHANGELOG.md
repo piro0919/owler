@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.11]
+
+- A run is now linked only to the Claude Code conversation that the job itself started. Before, two jobs sharing a folder could pick up each other's conversation when their runs overlapped, so a job that never runs Claude could show another job's report and cost
+
 ## [0.1.10]
 
 - A job's page in the window now says when the job is marked unread: after every successful run, never, or in the job's own words for a job that asks on a single run
