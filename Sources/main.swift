@@ -16,6 +16,24 @@ enum Dock {
     }
 }
 
+/// 起動のしかたで、窓を出すかを決める
+@MainActor
+enum Launch {
+    /// ログイン項目として起こされたか。起動の Apple Event に印が付く
+    static var isLoginItem: Bool {
+        guard let event = NSAppleEventManager.shared().currentAppleEvent, event.eventID == kAEOpenApplication else {
+            return false
+        }
+        return event.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
+    }
+
+    /// ログイン時に起こすのはメニューバーに居るため。窓まで出すと、Mac を起動するたびに窓が出る。
+    /// メニューバーに出さない設定なら、窓を出さないとどこにも現れないので出す
+    static func showsWindow(loginItem: Bool, showsMenuBar: Bool, settings: Bool) -> Bool {
+        settings || !loginItem || !showsMenuBar
+    }
+}
+
 /// 窓を出す。閉じたら、メニューバーから開き直せる
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -50,7 +68,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if NSApp.keyWindow?.styleMask.contains(.titled) == true { Dock.show() }
             }
         }
-        main.show(settings: CommandLine.arguments.contains("--settings"))
+        let settings = CommandLine.arguments.contains("--settings")
+        let loginItem = Launch.isLoginItem
+        if Launch.showsWindow(loginItem: loginItem, showsMenuBar: Preferences.showsMenuBar, settings: settings) {
+            main.show(settings: settings)
+        } else {
+            NSApp.setActivationPolicy(.accessory)
+        }
         Updater.shared.checkQuietly()
     }
 

@@ -125,6 +125,12 @@ enum SelfTest {
             check(daily.costEstimate([nil, nil]) == nil, "Claude が一度も動いていなければ出さない")
             check(daily.runsPerMonth == 30 && abs(weekly.runsPerMonth - 30.0 / 7) < 0.001, "月の回数は毎日30回、週1なら約4回")
 
+            // ログイン時はメニューバーに居るだけで、窓は出さない
+            check(!Launch.showsWindow(loginItem: true, showsMenuBar: true, settings: false), "ログイン時は窓を出さない")
+            check(Launch.showsWindow(loginItem: true, showsMenuBar: false, settings: false), "メニューバーが無ければ窓を出す")
+            check(Launch.showsWindow(loginItem: false, showsMenuBar: true, settings: false), "手で開いたら窓を出す")
+            check(!Launch.isLoginItem, "コマンドとして起こしたらログイン項目ではない")
+
             // 報告の Markdown
             check(
                 Markdown.blocks("# 題\n\n本文\n続き\n- 点\n  - 深い\n1. 一\n```\nlet a = 1\n```\n---")

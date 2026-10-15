@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - The window no longer says "Select a job" when no job is selected
+- When Owler opens at login, it stays in the menu bar instead of showing its window. If the menu bar icon is turned off, the window still opens
 
 ## [0.1.13]
 
