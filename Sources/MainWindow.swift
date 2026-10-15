@@ -190,8 +190,11 @@ struct MainView: View {
                     } else {
                         JobPage(model: model, job: job)
                     }
+                } else {
+                    // ジョブを選んでいないときは何も出さない。「定期実行を選んでください」は要らないと言われた（2026-10-14）。
+                    // 中身が空だと下の背景や題が効かないので、透明な色を置く
+                    Color.clear
                 }
-                // ジョブを選んでいないときは何も出さない。「定期実行を選んでください」は要らないと言われた（2026-10-14）
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(Color(nsColor: .windowBackgroundColor))
