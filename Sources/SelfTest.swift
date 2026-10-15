@@ -129,7 +129,11 @@ enum SelfTest {
             check(!Launch.showsWindow(loginItem: true, showsMenuBar: true, settings: false), "ログイン時は窓を出さない")
             check(Launch.showsWindow(loginItem: true, showsMenuBar: false, settings: false), "メニューバーが無ければ窓を出す")
             check(Launch.showsWindow(loginItem: false, showsMenuBar: true, settings: false), "手で開いたら窓を出す")
-            check(!Launch.isLoginItem, "コマンドとして起こしたらログイン項目ではない")
+            let login = Date(timeIntervalSince1970: 1_000_000)
+            check(Launch.isJustAfterLogin(login, now: login + 2), "ログインの直後ならログイン時とみなす")
+            check(!Launch.isJustAfterLogin(login, now: login + 60), "1分たったら手で開いたとみなす")
+            check(!Launch.isJustAfterLogin(login, now: login - 1), "ログインより前の時刻は数えない")
+            check(!Launch.isJustAfterLogin(nil, now: login), "ログインの記録が無ければみなさない")
 
             // 報告の Markdown
             check(

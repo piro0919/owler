@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 
 /// 窓を出しているあいだだけ Dock に出す。メニューバーに居て窓が無いときは Dock から外す
 @MainActor
@@ -19,12 +20,40 @@ enum Dock {
 /// 起動のしかたで、窓を出すかを決める
 @MainActor
 enum Launch {
-    /// ログイン項目として起こされたか。起動の Apple Event に印が付く
+    /// ログイン時に起こされたか。applicationDidFinishLaunching の中で呼ぶ。起動の Apple Event はそのあいだしか読めない
     static var isLoginItem: Bool {
-        guard let event = NSAppleEventManager.shared().currentAppleEvent, event.eventID == kAEOpenApplication else {
-            return false
+        if let event = NSAppleEventManager.shared().currentAppleEvent, event.eventID == kAEOpenApplication,
+            event.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
+        {
+            return true
         }
-        return event.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
+        // SMAppService で入れたログイン項目にも印が付くかは確かめられていない。「再ログイン時にウインドウを
+        // 再度開く」で戻されたときは付かない。なので、ログイン項目が有効で、ログインの直後に起きたならログイン時とみなす
+        return SMAppService.mainApp.status == .enabled && isJustAfterLogin(consoleLogin, now: Date())
+    }
+
+    /// ログインから1分以内か。手元の Mac ではログインの3秒後に起きていた
+    static func isJustAfterLogin(_ login: Date?, now: Date) -> Bool {
+        guard let login else { return false }
+        return (0..<60).contains(now.timeIntervalSince(login))
+    }
+
+    /// この利用者が画面からログインした時刻（`who` の console の行）
+    private static var consoleLogin: Date? {
+        let user = NSUserName()
+        var latest: Date?
+        setutxent()
+        defer { endutxent() }
+        while let entry = getutxent() {
+            var record = entry.pointee
+            guard record.ut_type == USER_PROCESS else { continue }
+            let line = withUnsafeBytes(of: &record.ut_line) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+            let name = withUnsafeBytes(of: &record.ut_user) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+            guard line == "console", name == user else { continue }
+            let time = Date(timeIntervalSince1970: TimeInterval(record.ut_tv.tv_sec))
+            if latest.map({ time > $0 }) ?? true { latest = time }
+        }
+        return latest
     }
 
     /// ログイン時に起こすのはメニューバーに居るため。窓まで出すと、Mac を起動するたびに窓が出る。
