@@ -67,6 +67,7 @@ enum Strings {
     static var folder: String { t("フォルダ", "Folder") }
     static var command: String { t("コマンド", "Command") }
     static var runs: String { t("実行の記録", "Runs") }
+    static var missed: String { t("記録なし", "No record") }
     static var noRuns: String { t("まだ動いていません", "Not run yet") }
     static var running: String { t("実行中", "Running") }
     static var succeeded: String { t("成功", "Succeeded") }

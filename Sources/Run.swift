@@ -62,7 +62,7 @@ enum RunStore {
     }
 
     /// 新しい順
-    static func all(_ id: String, limit: Int = 50) -> [RunRecord] {
+    static func all(_ id: String, limit: Int = listed) -> [RunRecord] {
         let files =
             (try? FileManager.default.contentsOfDirectory(at: Paths.runs(id), includingPropertiesForKeys: nil)) ?? []
         let decoder = JSONDecoder()
@@ -73,12 +73,23 @@ enum RunStore {
             .compactMap { try? decoder.decode(RunRecord.self, from: Data(contentsOf: $0)) }
     }
 
+    /// 窓の実行の表に出す回数
+    static let listed = 50
+
     /// 印のために読み直す回数。3秒ごとに読むので、残している回をすべては読まない
     static let unseenWindow = 30
 
     /// まだ見に来ていない回。新しい順
     static func unseen(_ job: Job) -> [RunRecord] {
         job.unseenRuns(all(job.id, limit: unseenWindow))
+    }
+
+    /// 予定の時刻に記録の無い回（Job.missedFires）。新しい順。`runs` は新しい順で、読んだ数が `limit` に
+    /// 達していれば、いちばん古い回より前は見ない。消した記録の時刻まで「記録なし」にしないため
+    @MainActor static func missed(_ job: Job, runs: [RunRecord], limit: Int) -> [Date] {
+        guard var since = JobStore.written(job.id) else { return [] }
+        if runs.count >= limit, let oldest = runs.last { since = max(since, oldest.start) }
+        return job.missedFires(runs: runs, since: since) { PowerLog.shared.awake(at: $0) }
     }
 
     /// その回を開いたことを書き込む。古い回もまとめて見たことにするかは Job.seenByOpening

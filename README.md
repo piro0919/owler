@@ -67,6 +67,12 @@ labelled `io.kkweb.owler.job.<id>` that calls `Owler run <id>`, which records th
 start, end, exit code and output of every run before handing over to your
 command.
 
+If a scheduled time passes while the Mac was awake and no run was recorded, a
+job's page shows that time as "No record". This catches runs that never started,
+for example when macOS stopped Owler before it could write anything. Owler
+reads the sleep and wake history from `pmset -g log`, so times when the Mac was
+asleep or off are left out.
+
 ## How a run is linked to Claude Code
 
 When a job starts `claude -p` in its folder, Owler finds the Claude Code
@@ -87,7 +93,8 @@ you like, and send it.
 
 Owler also sits in the menu bar, listing each job with the result of its last
 run and when it runs next, in the order the jobs run next. A number next to the owl
-counts the jobs whose last run failed. Turn it off
+counts the jobs whose last run failed, or whose last scheduled time has no
+record. Turn it off
 in the settings (the gear at the bottom of the job list, or ⌘,) if you only want
 the window.
 

@@ -102,6 +102,30 @@ struct Job: Codable, Identifiable, Equatable {
         fires(from: date, direction: .backward, calendar: calendar).max()
     }
 
+    /// 予定の時刻を過ぎたのに記録の無い回。新しい順。起きていた時刻（`awake` が true）に限る。
+    /// 2026-10-16、更新直後の 9:00 に `Owler run` が起動前に macOS に殺され、記録が何も残らず、窓では前の日の成功が
+    /// 最新のまま普通に見えていた。原因が何でも気付けるように、予定と記録を突き合わせる。
+    /// 予定の1分前から10分後までに始まった回か、その時刻に動いていた回があれば、動いたとみなす。
+    /// `since` より前は見ない。ジョブを足す前の時刻や、残っている記録より古い時刻まで「記録なし」にしないため
+    func missedFires(
+        runs: [RunRecord], since: Date, now: Date = Date(), calendar: Calendar = .current,
+        awake: (Date) -> Bool?
+    ) -> [Date] {
+        var missed: [Date] = []
+        // 始まったばかりの回は記録を書く途中かもしれないので、2分待ってから数える
+        var cursor = now.addingTimeInterval(-120)
+        while let fire = previousFire(before: cursor, calendar: calendar), fire < cursor, fire >= since {
+            cursor = fire
+            let ran = runs.contains { run in
+                let end = run.end ?? (run.state == .running ? now : run.start)
+                let lag = run.start.timeIntervalSince(fire)
+                return (-60...600).contains(lag) || (run.start <= fire && end >= fire)
+            }
+            if !ran, awake(fire) == true { missed.append(fire) }
+        }
+        return missed
+    }
+
     private func fires(from date: Date, direction: Calendar.SearchDirection, calendar: Calendar) -> [Date] {
         schedule.compactMap { slot -> Date? in
             var parts = DateComponents()
@@ -230,6 +254,11 @@ enum JobStore {
         return files.filter { $0.pathExtension == "json" }
             .compactMap { try? JSONDecoder().decode(Job.self, from: Data(contentsOf: $0)) }
             .sorted { $0.id < $1.id }
+    }
+
+    /// 定義を書いた時刻。予定が今の形になったのはこれ以降
+    static func written(_ id: String) -> Date? {
+        (try? FileManager.default.attributesOfItem(atPath: Paths.job(id).path))?[.modificationDate] as? Date
     }
 
     static func load(_ id: String) -> Job? {

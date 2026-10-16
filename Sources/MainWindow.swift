@@ -9,6 +9,10 @@ final class Model: ObservableObject {
     /// まだ見に来ていない回のあるジョブ
     @Published var unseenJobs: Set<String> = []
     @Published var runs: [RunRecord] = []
+    /// 選んだジョブの、予定の時刻に記録の無い回。新しい順
+    @Published var missed: [Date] = []
+    /// 最後の回より後に、記録の無い予定があるジョブ。一覧の丸を白抜きにする
+    @Published var missedJobs: Set<String> = []
     /// 切り替えたらその場で読み直す。3秒ごとの読み直しを待つと、前のジョブの一覧が残って見える
     @Published var selectedJob: String? {
         didSet {
@@ -54,12 +58,17 @@ final class Model: ObservableObject {
         if last != lastRuns { lastRuns = last }
         let unseen = Set(jobs.filter { !RunStore.unseen($0).isEmpty }.map(\.id))
         if unseen != unseenJobs { unseenJobs = unseen }
+        let missed = Set(
+            jobs.filter { !RunStore.missed($0, runs: last[$0.id].map { [$0] } ?? [], limit: 1).isEmpty }.map(\.id))
+        if missed != missedJobs { missedJobs = missed }
         loadRuns()
     }
 
     private func loadRuns() {
         let runs = selectedJob.map { RunStore.all($0) } ?? []
         if runs != self.runs { self.runs = runs }
+        let missed = job.map { RunStore.missed($0, runs: runs, limit: RunStore.listed) } ?? []
+        if missed != self.missed { self.missed = missed }
         if runs.contains(where: { $0.state == .running }) { tick += 1 }
     }
 
@@ -134,7 +143,7 @@ struct MainView: View {
         NavigationSplitView {
             List(model.jobs, selection: $model.selectedJob) { job in
                 HStack(spacing: 10) {
-                    StateDot(state: model.lastRuns[job.id]?.state)
+                    StateDot(state: model.lastRuns[job.id]?.state, missed: model.missedJobs.contains(job.id))
                     Text(job.displayName).lineLimit(1)
                         .fontWeight(model.unseenJobs.contains(job.id) ? .bold : nil)
                 }
@@ -216,16 +225,21 @@ struct JobPage: View {
                     OpenButton(model: model)
                 }
                 Card {
-                    if model.runs.isEmpty {
+                    if rows.isEmpty {
                         Text(Strings.noRuns)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 36)
                     } else {
                         VStack(spacing: 0) {
-                            ForEach(Array(model.runs.enumerated()), id: \.element.id) { index, run in
+                            ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                                 if index > 0 { Divider() }
-                                RunRow(run: run, unseen: job.awaitsReview(run)) { model.openedRunID = run.id }
+                                switch row {
+                                case .run(let run):
+                                    RunRow(run: run, unseen: job.awaitsReview(run)) { model.openedRunID = run.id }
+                                case .missed(let fire):
+                                    MissedRow(fire: fire)
+                                }
                             }
                         }
                     }
@@ -233,6 +247,30 @@ struct JobPage: View {
             }
             .padding(28)
         }
+    }
+
+    /// 実行の表の行。記録の無い予定の回を、その時刻の位置に差す
+    private enum Row: Identifiable {
+        case run(RunRecord)
+        case missed(Date)
+
+        var id: String {
+            switch self {
+            case .run(let run): run.id
+            case .missed(let fire): "missed-\(fire.timeIntervalSince1970)"
+            }
+        }
+
+        var time: Date {
+            switch self {
+            case .run(let run): run.start
+            case .missed(let fire): fire
+            }
+        }
+    }
+
+    private var rows: [Row] {
+        (model.runs.map(Row.run) + model.missed.map(Row.missed)).sorted { $0.time > $1.time }
     }
 
     /// 見出しの下の項目。予定・次回・料金を「·」で1行につないでいた頃は、折り返して「月 約 $14」が割れ、
@@ -276,6 +314,25 @@ struct RunRow: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
+    }
+}
+
+/// 予定の時刻に記録の無い回の行。開く中身が無いので押せない。原因（殺された・登録が外れていた）は
+/// Owler には分からないので、起きたことだけを書く
+struct MissedRow: View {
+    let fire: Date
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(Format.dateTime(fire)).monospacedDigit()
+            Spacer()
+            StateDot(state: nil, missed: true)
+            Text(Strings.missed).foregroundStyle(.secondary)
+            // 押せる行と文言の位置を揃える
+            Image(systemName: "chevron.right").font(.caption).hidden()
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 44)
     }
 }
 
@@ -441,9 +498,15 @@ struct Card<Content: View>: View {
 
 struct StateDot: View {
     let state: RunRecord.State?
+    /// 予定の時刻に記録が無い。灰の白抜きにする
+    var missed = false
 
     var body: some View {
-        Circle().fill(color).frame(width: 8, height: 8)
+        if missed {
+            Circle().strokeBorder(Color.gray, lineWidth: 1.5).frame(width: 8, height: 8)
+        } else {
+            Circle().fill(color).frame(width: 8, height: 8)
+        }
     }
 
     private var color: Color {

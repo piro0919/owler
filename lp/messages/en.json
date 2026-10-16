@@ -28,7 +28,7 @@
     "items": [
       {
         "title": "Run history",
-        "body": "Start and end times, exit code and output, recorded for every run."
+        "body": "Start and end times, exit code and output, recorded for every run. A scheduled time that passed while the Mac was awake, with no run recorded, is shown as \"No record\"."
       },
       {
         "title": "AI reports",
@@ -44,7 +44,7 @@
       },
       {
         "title": "Menu bar",
-        "body": "The latest result and next run of each job, in the order they run next, with a count of failures. Jobs with a result you haven't read yet are grouped at the top and marked until you open them."
+        "body": "The latest result and next run of each job, in the order they run next, with a count of failures and missed runs. Jobs with a result you haven't read yet are grouped at the top and marked until you open them."
       }
     ]
   },
@@ -83,7 +83,7 @@
     "sections": [
       {
         "title": "What it reads and writes",
-        "body": "Job definitions, and the record and output of each run, live in ~/Library/Application Support/Owler. The launchd agents live in ~/Library/LaunchAgents. When a job runs claude -p, Owler looks for that folder's Claude Code transcript and reads the last message. To find the editor window, it reads the titles of Cursor and VS Code windows."
+        "body": "Job definitions, and the record and output of each run, live in ~/Library/Application Support/Owler. The launchd agents live in ~/Library/LaunchAgents. When a job runs claude -p, Owler looks for that folder's Claude Code transcript and reads the last message. To find the editor window, it reads the titles of Cursor and VS Code windows. To tell a missed run from a time when the Mac was asleep, it reads the sleep and wake history from pmset -g log."
       },
       {
         "title": "Nothing leaves your Mac",

@@ -102,6 +102,49 @@ enum SelfTest {
             check(line(run(at(10, 9), 1)).hasPrefix(Strings.failed(1) + " · "), "失敗は言葉で添える")
             check(line(run(at(8, 9), 0)).hasPrefix(Strings.lastRun("")), "予定の回が無ければ前回を出す")
             check(line(nil).hasPrefix(Strings.noRuns + " · "), "まだ動いていないことも出す")
+            check(
+                MenuBar.line(daily, run(at(9, 9), 0), missed: true, now: now, calendar: calendar)
+                    .hasPrefix(Strings.missed + " · "),
+                "記録の無い予定は言葉で添える")
+
+            // 予定の時刻に記録の無い回。起きていた時刻だけ
+            let awake = { (_: Date) -> Bool? in true }
+            let since = at(1, 0)
+            check(
+                daily.missedFires(runs: [run(at(10, 9), 0)], since: since, now: now, calendar: calendar, awake: awake)
+                    .filter { $0 > at(9, 12) }.isEmpty, "予定どおり動いた回は数えない")
+            check(
+                daily.missedFires(
+                    runs: [run(at(9, 9), 0)], since: at(9, 12), now: now, calendar: calendar, awake: awake)
+                    == [at(10, 9)], "予定の時刻に記録が無ければ数える")
+            let late = run(at(10, 9).addingTimeInterval(300), 0)
+            check(
+                daily.missedFires(runs: [late], since: at(9, 12), now: now, calendar: calendar, awake: awake).isEmpty,
+                "数分遅れて始まった回は動いたとみなす")
+            let manual = run(at(10, 9).addingTimeInterval(26 * 60), 0)
+            check(
+                daily.missedFires(runs: [manual], since: at(9, 12), now: now, calendar: calendar, awake: awake)
+                    == [at(10, 9)], "あとから手で動かした回では埋めない")
+            check(
+                daily.missedFires(runs: [], since: at(9, 12), now: now, calendar: calendar) { _ in false }.isEmpty,
+                "眠っていた時刻は数えない")
+            check(
+                daily.missedFires(runs: [], since: at(9, 12), now: now, calendar: calendar) { _ in nil }.isEmpty,
+                "起きていたか分からない時刻は数えない")
+            check(
+                daily.missedFires(runs: [], since: at(10, 10), now: now, calendar: calendar, awake: awake).isEmpty,
+                "ジョブを足す前の時刻は数えない")
+            check(
+                daily.missedFires(
+                    runs: [], since: at(9, 12), now: at(10, 9).addingTimeInterval(60), calendar: calendar,
+                    awake: awake
+                ).isEmpty,
+                "始まったばかりの予定はまだ数えない")
+            var long = run(at(10, 8), 0)
+            long.end = at(10, 10)
+            check(
+                daily.missedFires(runs: [long], since: at(9, 12), now: now, calendar: calendar, awake: awake).isEmpty,
+                "前の回が動いているあいだの予定は数えない")
 
             // ジョブが起こした Claude Code だけを拾う。親を辿ってジョブのプロセスに行き着くか
             check(SessionWatcher.isDescendant(getpid(), of: getppid()), "子は親の子孫")
@@ -285,6 +328,33 @@ enum SelfTest {
             check(both.size.width >= single.size.width, "桁が増えれば幅も増える")
             let dot = StatusTitle.image(icon: icon, failed: 0, running: 0, unseen: true, phase: 0)
             check(dot.size.width > 18 && dot.size.width < 26 && dot.isTemplate, "点だけなら影絵の右に点の分だけ広げる")
+        }
+
+        // 眠った・起きた記録
+        do {
+            let log = """
+                2026-10-16 06:23:45 +0900 Wake                \tWake from Deep Idle
+                2026-10-16 06:25:47 +0900 Start               \tpowerd process is started
+                2026-10-16 06:42:48 +0900 Sleep               \tEntering Sleep state due to 'Clamshell Sleep'
+                2026-10-16 06:42:55 +0900 DarkWake            \tDarkWake from Deep Idle
+                2026-10-16 06:58:02 +0900 Wake Requests       \t[process=dasd request=SleepService]
+                2026-10-16 07:03:08 +0900 Wake                \tWake from Deep Idle
+                2026-10-16 07:03:09 +0900 WakeDetails         \tDriverReason:-
+                2026-10-16 09:35:10 +0900 Sleep               \tEntering Sleep state due to 'Idle Sleep'
+                """
+            let events = PowerLog.parse(log)
+            check(events.count == 6, "起きた・眠った・起動だけを拾う")
+            let time = { (s: String) in
+                let f = DateFormatter()
+                f.locale = Locale(identifier: "en_US_POSIX")
+                f.dateFormat = "yyyy-MM-dd HH:mm Z"
+                return f.date(from: "2026-10-16 \(s) +0900")!
+            }
+            check(PowerLog.awake(at: time("09:00"), in: events) == true, "目覚めのあとは起きている")
+            check(PowerLog.awake(at: time("06:50"), in: events) == false, "DarkWake は眠っている側")
+            check(PowerLog.awake(at: time("10:00"), in: events) == false, "眠ったあとは眠っている")
+            check(PowerLog.awake(at: time("06:24"), in: events) == false, "起動の前は電源が落ちていたとみなす")
+            check(PowerLog.awake(at: time("06:00"), in: events) == nil, "記録より前は分からない")
         }
 
         // 子の終わり方
