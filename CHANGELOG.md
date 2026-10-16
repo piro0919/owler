@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.1.15]
 
 - A job's page shows "No record" at a scheduled time that passed while the Mac was awake but has no run. Before, a run that macOS stopped before it started left nothing behind, and the page looked as if nothing had happened. The menu bar counts such a job with the failures until its next run. Times when the Mac was asleep or off are left out
 
