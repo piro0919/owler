@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.1.16]
 
 - Opening a failed or interrupted run removes it from the count next to the owl in the menu bar. Before, the count stayed until the job's next run, so a failure in the last run of the evening stayed there until morning even after you had read it
 
