@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- Opening a failed or interrupted run removes it from the count next to the owl in the menu bar. Before, the count stayed until the job's next run, so a failure in the last run of the evening stayed there until morning even after you had read it
+
 ## [0.1.15]
 
 - A job's page shows "No record" at a scheduled time that passed while the Mac was awake but has no run. Before, a run that macOS stopped before it started left nothing behind, and the page looked as if nothing had happened. The menu bar counts such a job with the failures until its next run. Times when the Mac was asleep or off are left out

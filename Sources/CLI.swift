@@ -136,9 +136,12 @@ enum CLI {
             reviewWhen: o.one("review-when"))
         let addsReview = job.review == true && JobStore.load(id)?.review != true
         let status = install(job)
-        // あとから --review を付けたジョブは、それまでの回を見たことにする。でないと付けた途端に過去の回すべてに印が付く
+        // あとから --review を付けたジョブは、それまでの回を見たことにする。でないと付けた途端に過去の回すべてに印が付く。
+        // 失敗した回は外す。見たことにすると、開いていない失敗が「!」から黙って消える
         if status == 0, addsReview {
-            for run in RunStore.all(id, limit: RunStore.keep) { RunStore.markSeen(id, run.stamp) }
+            for run in RunStore.all(id, limit: RunStore.keep) where run.state == .succeeded {
+                RunStore.markSeen(id, run.stamp)
+            }
         }
         return status
     }

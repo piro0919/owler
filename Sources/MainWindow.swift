@@ -51,6 +51,11 @@ final class Model: ObservableObject {
     var run: RunRecord? { openedRun ?? runs.first }
 
     func reload() {
+        // 開いたまま終わった回も見たことにする。開いた時点では実行中で、既読にする対象ではなかった
+        // ジョブのページ（openedRun が nil）では見たことにしない
+        if let job, let openedRun, !job.seenByOpening(openedRun, among: runs).isEmpty {
+            RunStore.markSeen(job, opening: openedRun)
+        }
         let jobs = JobStore.all()
         if jobs != self.jobs { self.jobs = jobs }
         var last: [String: RunRecord] = [:]
@@ -95,7 +100,7 @@ final class Model: ObservableObject {
         job.costEstimate(runs.filter { $0.end != nil }.map { cost(job: job, run: $0) })
     }
 
-    /// 見に来てほしいジョブの、開いた回を見たことにする。ジョブのページでは最新の回。
+    /// 見に来てほしいジョブの回と、失敗・中断した回を、開いたら見たことにする。ジョブのページでは最新の回。
     /// ジョブを選んだだけでは見たことにしない。ジョブのページには報告が出ないので、読まずに印が消える
     func markSeen() {
         guard let job, let run, !job.seenByOpening(run, among: runs).isEmpty else { return }
@@ -550,9 +555,12 @@ final class MainWindowController {
         if settings { model.openSettings() }
         if let job {
             model.selectedJob = job
-            // メニューバーから開いたとき、まだ見に来ていない回があれば、いちばん新しいその回を開く（開けば見たことになる）
-            if let definition = model.job, let run = RunStore.unseen(definition).first {
-                model.openedRunID = run.id
+            // メニューバーから開いたとき、まだ見に来ていない回があれば、いちばん新しいその回を開く（開けば見たことになる）。
+            // 無ければ、まだ開いていない失敗の回を開く。「!」に数えている回で、開けば外れる
+            if let definition = model.job {
+                let latest = RunStore.all(definition.id, limit: 1).first
+                let failed = definition.awaitsAcknowledgement(latest) ? latest : nil
+                if let run = RunStore.unseen(definition).first ?? failed { model.openedRunID = run.id }
             }
         }
         Dock.show()

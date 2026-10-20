@@ -10,7 +10,7 @@ struct RunRecord: Codable, Equatable, Identifiable {
     var session: String?
     /// 記録を取っている `Owler run` のプロセス。終わりを書けずに止まった回を見分ける
     var pid: Int32?
-    /// 利用者がこの回を開いた時刻。見に来てほしいジョブ（Job.review）の印を消すのに使う
+    /// 利用者がこの回を開いた時刻。見に来てほしいジョブ（Job.review）の印と、失敗した回の「!」を消すのに使う
     var seen: Date?
     /// ジョブが `OWLER_REVIEW_FILE` に書いて、この回を見に来てほしいと伝えた。`--review` でないジョブでも印を出す
     var asked: Bool?
@@ -26,6 +26,9 @@ struct RunRecord: Codable, Equatable, Identifiable {
 
     /// interrupted は、終わりを書く前に `Owler run` ごと止められた回（登録し直し・ログアウト・電源断など）
     enum State { case running, succeeded, failed, interrupted }
+
+    /// もう書き換わらない回。開いた時刻を書いてよい。中断した回は終わりを書けずに止まっているので、終わりが無くても含める
+    var settled: Bool { end != nil || state == .interrupted }
 
     var state: State {
         if let exitCode { return exitCode == 0 ? .succeeded : .failed }
@@ -125,7 +128,7 @@ enum RunStore {
         decoder.dateDecodingStrategy = .iso8601
         guard let data = try? Data(contentsOf: record(id, stamp)),
             var run = try? decoder.decode(RunRecord.self, from: data),
-            run.end != nil, run.seen == nil
+            run.settled, run.seen == nil
         else { return }
         run.seen = date
         try? save(run, for: id)

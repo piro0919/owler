@@ -274,6 +274,19 @@ enum SelfTest {
             check(
                 daily.seenByOpening(day3, among: [day3, day2, day1]).isEmpty,
                 "--review でないジョブは、頼んだ回だけを開いたときに既読にする")
+
+            // 失敗と中断は「!」に数え、その回を開けば外す
+            var broken = run(at(10, 9), 1)
+            check(daily.awaitsAcknowledgement(broken), "開いていない失敗は「!」に数える")
+            check(daily.seenByOpening(broken, among: [broken]).map(\.stamp) == ["s"], "失敗した回を開けば見たことにする")
+            broken.seen = now
+            check(!daily.awaitsAcknowledgement(broken), "開いた失敗は「!」に数えない")
+            let stopped = RunRecord(stamp: "s", start: at(10, 9), end: nil, exitCode: nil, session: nil, pid: nil)
+            check(daily.awaitsAcknowledgement(stopped), "開いていない中断は「!」に数える")
+            check(!daily.awaitsAcknowledgement(run(at(10, 9), 0)), "成功は「!」に数えない")
+            check(!daily.awaitsAcknowledgement(nil), "まだ動いていなければ「!」に数えない")
+            check(stopped.settled, "中断した回は終わりが無くても開いたことを書ける")
+            check(broken.settled, "終わった回は開いたことを書ける")
         }
 
         // 日時の書き方は地域に従う

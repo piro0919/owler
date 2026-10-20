@@ -36,6 +36,13 @@ struct Job: Codable, Identifiable, Equatable {
         return run.state == .succeeded && run.seen == nil
     }
 
+    /// 失敗か中断で、まだ開いていない回。メニューバーの「!」に数える。開けば外す。次の回まで消えないと、
+    /// 夜の最後の回の失敗が朝まで残り、中身を見たあとも消す手段が無かった（2026-10-20）
+    func awaitsAcknowledgement(_ run: RunRecord?) -> Bool {
+        guard let run else { return false }
+        return [.failed, .interrupted].contains(run.state) && run.seen == nil
+    }
+
     /// まだ見に来ていない回すべて。新しい順のまま返す。最新の回だけを見ると、次の回が来たところで印が黙って消える
     func unseenRuns(_ runs: [RunRecord]) -> [RunRecord] {
         runs.filter { awaitsReview($0) }
@@ -46,7 +53,7 @@ struct Job: Codable, Identifiable, Equatable {
     /// ジョブが頼んだ回（asked）は回ごとに中身が違う（返信の下書きなど）ので、開いた回だけ
     func seenByOpening(_ run: RunRecord, among runs: [RunRecord]) -> [RunRecord] {
         let older = review == true ? unseenRuns(runs).filter { $0.stamp < run.stamp && $0.asked != true } : []
-        return (awaitsReview(run) ? [run] : []) + older
+        return (awaitsReview(run) || awaitsAcknowledgement(run) ? [run] : []) + older
     }
 
     /// 30日に動く回数の見込み。曜日の決まった時刻は週に1回

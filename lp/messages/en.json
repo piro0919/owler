@@ -44,7 +44,7 @@
       },
       {
         "title": "Menu bar",
-        "body": "The latest result and next run of each job, in the order they run next, with a count of failures and missed runs. Jobs with a result you haven't read yet are grouped at the top and marked until you open them."
+        "body": "The latest result and next run of each job, in the order they run next, with a count of failures and missed runs. A failed run leaves the count once you open it. Jobs with a result you haven't read yet are grouped at the top and marked until you open them."
       }
     ]
   },

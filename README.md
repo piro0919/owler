@@ -94,7 +94,7 @@ you like, and send it.
 Owler also sits in the menu bar, listing each job with the result of its last
 run and when it runs next, in the order the jobs run next. A number next to the owl
 counts the jobs whose last run failed, or whose last scheduled time has no
-record. Turn it off
+record. A failed run drops out of the count once you open it. Turn it off
 in the settings (the gear at the bottom of the job list, or ⌘,) if you only want
 the window.
 

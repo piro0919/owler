@@ -87,8 +87,8 @@ final class MenuBar: NSObject, NSMenuDelegate {
     private func refresh() {
         guard item != nil else { return }
         let runs = lastRuns()
-        // 記録の無い予定は失敗と同じく「!」で数える。次の回が動けば消える
-        failed = runs.filter { $0.missed || [.failed, .interrupted].contains($0.run?.state) }.count
+        // 記録の無い予定は失敗と同じく「!」で数える。次の回が動けば消える。失敗と中断は、その回を開いても消える
+        failed = runs.filter { $0.missed || $0.job.awaitsAcknowledgement($0.run) }.count
         running = runs.filter { $0.run?.state == .running }.count
         unseen = runs.filter(\.unseen).count
         draw()
