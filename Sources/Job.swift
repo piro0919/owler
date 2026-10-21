@@ -295,6 +295,7 @@ enum JobStore {
             }
             throw error
         }
+        Reload.remember(job.id, program: owler)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         try encoder.encode(job).write(to: Paths.job(job.id))
@@ -316,21 +317,29 @@ enum JobStore {
 /// 更新で Owler の署名が変わったら、ジョブを launchd に入れ直す。
 /// macOS はジョブごとに、起こしてよいプログラムの署名を覚えている（launchctl print の「managed LWCR」）。
 /// 自己署名なので更新のたびに食い違い、入れ直すまで起動の段階で殺されるか、起こされもしなかった。
-/// 0.1.14 と 0.1.16 に上げた直後の 9:00 に、どちらも起きた（2026-10-16・10-21）。入れ直せば通る（実測）
+/// 0.1.14 と 0.1.16 に上げた直後の 9:00 に、どちらも起きた（2026-10-16・10-21）。入れ直せば通る（実測）。
+/// 見るのは各ジョブの plist が呼ぶ実行ファイルの署名で、入れたときの値をジョブごとに覚える。
+/// 動いている Owler の署名で決めると、手元のビルドを開いただけで全部を入れ直してしまう
 enum Reload {
-    private static let key = "loadedCodeHash"
+    private static let key = "loadedCodeHashes"
 
-    /// いま動いている Owler の署名の値（cdhash）
-    static var codeHash: String? {
-        var code: SecCode?
-        var staticCode: SecStaticCode?
+    /// その実行ファイルの署名の値（cdhash）
+    static func codeHash(at path: String) -> String? {
+        var code: SecStaticCode?
         var info: CFDictionary?
-        guard SecCodeCopySelf([], &code) == errSecSuccess, let code,
-            SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode,
-            SecCodeCopySigningInformation(staticCode, [], &info) == errSecSuccess,
+        guard SecStaticCodeCreateWithPath(URL(fileURLWithPath: path) as CFURL, [], &code) == errSecSuccess, let code,
+            SecCodeCopySigningInformation(code, [], &info) == errSecSuccess,
             let hash = (info as? [String: Any])?[kSecCodeInfoUnique as String] as? Data
         else { return nil }
         return hash.map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// plist が呼ぶ実行ファイル
+    static func program(_ id: String) -> String? {
+        guard let data = try? Data(contentsOf: Paths.plist(id)),
+            let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+        else { return nil }
+        return (plist["ProgramArguments"] as? [String])?.first
     }
 
     static func needed(loaded: String?, current: String?) -> Bool {
@@ -338,24 +347,45 @@ enum Reload {
         return loaded != current
     }
 
-    /// 窓の起動時に呼ぶ。動いているジョブは、入れ直すと止まるので終わるまで待つ。
-    /// 全部入れ直してから覚える。途中で終わったら、次に起動したときにまたやる
+    private static var loaded: [String: String] {
+        get { UserDefaults.standard.dictionary(forKey: key) as? [String: String] ?? [:] }
+        set { UserDefaults.standard.set(newValue, forKey: key) }
+    }
+
+    /// 入れた時点の署名を覚える。`owler add` のたびに、次の起動で入れ直さずに済む
+    static func remember(_ id: String, program: String) {
+        guard let hash = codeHash(at: program) else { return }
+        loaded[id] = hash
+    }
+
+    /// アプリの起動時に呼ぶ。動いているジョブは入れ直すと止まるので、終わるまで1分おきに待つ。
+    /// 入れ損ねたジョブも覚えずに次の巡で試す。1時間で諦め、残りは次に起動したときにやる
     static func ifUpdated() {
-        let current = codeHash
-        guard needed(loaded: UserDefaults.standard.string(forKey: key), current: current) else { return }
         Thread.detachNewThread {
-            var pending = JobStore.all()
-            while true {
-                pending = pending.filter { job in
-                    if RunStore.all(job.id, limit: 1).first?.state == .running { return true }
+            for _ in 0..<60 {
+                var waiting = false
+                // 巡ごとに読み直す。待っているあいだに消されたジョブを入れ直さない
+                for job in JobStore.all() {
+                    guard let program = program(job.id),
+                        needed(loaded: loaded[job.id], current: codeHash(at: program))
+                    else { continue }
+                    if Launchctl.isRunning(Paths.label(job.id))
+                        || RunStore.all(job.id, limit: 1).first?.state == .running
+                    {
+                        waiting = true
+                        continue
+                    }
                     Launchctl.bootoutAndWait(Paths.label(job.id))
-                    try? Launchctl.bootstrap(Paths.plist(job.id))
-                    return false
+                    do {
+                        try Launchctl.bootstrap(Paths.plist(job.id))
+                        remember(job.id, program: program)
+                    } catch {
+                        waiting = true
+                    }
                 }
-                if pending.isEmpty { break }
+                if !waiting { return }
                 sleep(60)
             }
-            UserDefaults.standard.set(current, forKey: key)
         }
     }
 }
@@ -393,6 +423,11 @@ enum Launchctl {
     }
 
     static func isLoaded(_ label: String) -> Bool { call(["print", "\(domain)/\(label)"]).status == 0 }
+
+    /// launchd がそのジョブのプロセスを起こしている最中か。回の記録を書く前の、起きた直後も含む
+    static func isRunning(_ label: String) -> Bool {
+        call(["print", "\(domain)/\(label)"]).output.contains("\n\tstate = running")
+    }
 
     /// 外して、外れたのを確かめる。読み込まれていなくても失敗にしない
     static func bootoutAndWait(_ label: String) {

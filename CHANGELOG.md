@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.17]
+
+- After an update, Owler reloads its jobs into launchd the next time it starts. Before, macOS kept checking the jobs against the previous version's signature, so the first scheduled runs after an update could be stopped before they started, or not started at all, and showed up as "No record". A job that is running is left alone until it finishes
+
 ## [0.1.16]
 
 - Opening a failed or interrupted run removes it from the count next to the owl in the menu bar. Before, the count stayed until the job's next run, so a failure in the last run of the evening stayed there until morning even after you had read it

@@ -291,7 +291,8 @@ enum SelfTest {
 
         // 署名が変わったらジョブを入れ直す
         do {
-            check(Reload.codeHash?.count == 40, "自分の署名の値を読める")
+            check(Reload.codeHash(at: Bundle.main.executablePath!)?.count == 40, "実行ファイルの署名の値を読める")
+            check(Reload.codeHash(at: "/nonexistent") == nil, "無いファイルの署名は読めない")
             check(Reload.needed(loaded: nil, current: "a"), "まだ覚えていなければ入れ直す")
             check(Reload.needed(loaded: "a", current: "b"), "署名が変わったら入れ直す")
             check(!Reload.needed(loaded: "a", current: "a"), "同じ署名なら入れ直さない")
