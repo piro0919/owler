@@ -1,4 +1,5 @@
 import Foundation
+import Security
 
 /// 決まった時刻に動かす1本の仕事
 struct Job: Codable, Identifiable, Equatable {
@@ -309,6 +310,53 @@ enum JobStore {
         Launchctl.bootoutAndWait(Paths.label(id))
         try? FileManager.default.removeItem(at: Paths.plist(id))
         try? FileManager.default.removeItem(at: Paths.job(id))
+    }
+}
+
+/// 更新で Owler の署名が変わったら、ジョブを launchd に入れ直す。
+/// macOS はジョブごとに、起こしてよいプログラムの署名を覚えている（launchctl print の「managed LWCR」）。
+/// 自己署名なので更新のたびに食い違い、入れ直すまで起動の段階で殺されるか、起こされもしなかった。
+/// 0.1.14 と 0.1.16 に上げた直後の 9:00 に、どちらも起きた（2026-10-16・10-21）。入れ直せば通る（実測）
+enum Reload {
+    private static let key = "loadedCodeHash"
+
+    /// いま動いている Owler の署名の値（cdhash）
+    static var codeHash: String? {
+        var code: SecCode?
+        var staticCode: SecStaticCode?
+        var info: CFDictionary?
+        guard SecCodeCopySelf([], &code) == errSecSuccess, let code,
+            SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode,
+            SecCodeCopySigningInformation(staticCode, [], &info) == errSecSuccess,
+            let hash = (info as? [String: Any])?[kSecCodeInfoUnique as String] as? Data
+        else { return nil }
+        return hash.map { String(format: "%02x", $0) }.joined()
+    }
+
+    static func needed(loaded: String?, current: String?) -> Bool {
+        guard let current else { return false }
+        return loaded != current
+    }
+
+    /// 窓の起動時に呼ぶ。動いているジョブは、入れ直すと止まるので終わるまで待つ。
+    /// 全部入れ直してから覚える。途中で終わったら、次に起動したときにまたやる
+    static func ifUpdated() {
+        let current = codeHash
+        guard needed(loaded: UserDefaults.standard.string(forKey: key), current: current) else { return }
+        Thread.detachNewThread {
+            var pending = JobStore.all()
+            while true {
+                pending = pending.filter { job in
+                    if RunStore.all(job.id, limit: 1).first?.state == .running { return true }
+                    Launchctl.bootoutAndWait(Paths.label(job.id))
+                    try? Launchctl.bootstrap(Paths.plist(job.id))
+                    return false
+                }
+                if pending.isEmpty { break }
+                sleep(60)
+            }
+            UserDefaults.standard.set(current, forKey: key)
+        }
     }
 }
 

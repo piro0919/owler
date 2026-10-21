@@ -289,6 +289,15 @@ enum SelfTest {
             check(broken.settled, "終わった回は開いたことを書ける")
         }
 
+        // 署名が変わったらジョブを入れ直す
+        do {
+            check(Reload.codeHash?.count == 40, "自分の署名の値を読める")
+            check(Reload.needed(loaded: nil, current: "a"), "まだ覚えていなければ入れ直す")
+            check(Reload.needed(loaded: "a", current: "b"), "署名が変わったら入れ直す")
+            check(!Reload.needed(loaded: "a", current: "a"), "同じ署名なら入れ直さない")
+            check(!Reload.needed(loaded: "a", current: nil), "署名を読めなければ触らない")
+        }
+
         // 日時の書き方は地域に従う
         do {
             let ja = Locale(identifier: "ja_JP")

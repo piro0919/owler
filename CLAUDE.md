@@ -172,6 +172,12 @@ plist には、登録したときの Owler の実行ファイルのパスが入�
 （com.apple.quarantine）が付き直し、押し直すまでジョブが黙って止まる恐れがある。Sparkle で上げた版には付かない
 （0.1.1 → 0.1.2 で実測）。
 
+**更新すると、入れ直すまでジョブが起こされない。** macOS はジョブごとに、起こしてよいプログラムの署名を覚えている
+（`launchctl print` の properties の「managed LWCR」）。自己署名なので更新のたびに食い違い、0.1.14 と 0.1.16 に上げた直後の
+9:00 に、起動の段階で殺される（「Launch Constraint Violation」）か、起こされもしない（終了状態 78、ログに
+「Unable to get updated LWCR」）ジョブが出た。入れ直せば通る。なので窓の起動時に、自分の署名の値（cdhash）が前に
+覚えたものと違えば、全部のジョブを bootout・bootstrap し直す（`Reload`）。動いているジョブは止まるので、終わるまで待つ。
+
 ## リリース
 
 Hawky と同じ。`./release.sh <版>` でビルド・`--selftest`・DMG・更新用の zip・署名した `appcast.xml` を作り、

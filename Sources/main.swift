@@ -105,6 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.setActivationPolicy(.accessory)
         }
         Updater.shared.checkQuietly()
+        Reload.ifUpdated()
     }
 
     /// メニューバーに居るなら、窓を閉じても終わらない
