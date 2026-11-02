@@ -2,7 +2,7 @@ import AppKit
 import ApplicationServices
 
 /// エディタの、目当てのフォルダの窓を前に出す。Hawky の Focus から、フォルダで探す部分だけを持ってきた。
-/// Claude Code の拡張は URL を前面の窓で開くので、窓が前に来たことを確かめてから URL を渡す
+/// Claude Code の拡張は URL をエディタの手前の窓で開くので、窓が手前に来たことを確かめてから URL を渡す
 @MainActor
 enum Focus {
     /// 待つ間隔と回数。新しく窓を開くと、前に出るまで2〜3秒かかる。10秒で諦める
@@ -16,7 +16,9 @@ enum Focus {
         AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
     }
 
-    /// フォルダの窓が前面に来るまで待つ。来なければ前に出す。来たら true
+    /// フォルダの窓がエディタの手前に来るまで待つ。来なければ前に出す。来たら true。
+    /// エディタがアプリとして前面かは待たない。別のアプリが前面を取り続けると上限の10秒まで待たされた。
+    /// URL を渡せばエディタは前に出る
     static func bringForward(bundleID: String, folder: String) async -> Bool {
         // 許可が無いと窓を確かめられず、上限の10秒まで待ってしまう。窓が開くぶんだけ待って渡す
         guard AXIsProcessTrusted() else {
@@ -28,18 +30,24 @@ enum Focus {
             if let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first {
                 let axApp = AXUIElementCreateApplication(app.processIdentifier)
                 if let front = focusedWindow(of: axApp), let title = string(front, kAXTitleAttribute as String),
-                    holdsFolder(title, name), app.isActive
+                    holdsFolder(title, name)
                 {
+                    activate(app)
                     return true
                 }
                 raise(folderNamed: name, in: axApp)
-                // macOS 14 以降は、前面化の権利を明け渡さないと他のアプリを前に出せない
-                if let me = NSApp { me.yieldActivation(to: app) }
-                app.activate()
+                activate(app)
             }
             try? await Task.sleep(for: interval)
         }
         return false
+    }
+
+    private static func activate(_ app: NSRunningApplication) {
+        guard !app.isActive else { return }
+        // macOS 14 以降は、前面化の権利を明け渡さないと他のアプリを前に出せない
+        if let me = NSApp { me.yieldActivation(to: app) }
+        app.activate()
     }
 
     /// 窓の名前がそのフォルダのものか。Cursor は `<タブ> — <フォルダ>` かフォルダ名だけ、

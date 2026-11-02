@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.18]
+
+- Opening a job in Claude Code no longer waits up to 10 seconds when another app keeps the focus. Owler now passes the conversation on as soon as the job's folder is the editor's front window, whichever app is frontmost.
+
 ## [0.1.17]
 
 - After an update, Owler reloads its jobs into launchd the next time it starts. Before, macOS kept checking the jobs against the previous version's signature, so the first scheduled runs after an update could be stopped before they started, or not started at all, and showed up as "No record". A job that is running is left alone until it finishes

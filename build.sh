@@ -6,6 +6,16 @@ cd "$(dirname "$0")"
 
 APP="Owler.app"
 TARGET="arm64-apple-macos14.0"
+
+# Command Line Tools 27.2 の SDK 27 は @State をマクロにしているのに、マクロの実装（SwiftUIMacros）が
+# 同梱されていないので、そのままだとコンパイルが通らない（2026-11-02）。実装が無ければ SDK 26 で組む。
+# Xcode を使う環境（CI）には実装があるので、そのまま
+CLT="/Library/Developer/CommandLineTools"
+if [ -z "${SDKROOT:-}" ] && [ "$(xcode-select -p)" = "$CLT" ] &&
+  [ ! -e "$CLT/usr/lib/swift/host/plugins/libSwiftUIMacros.dylib" ] &&
+  [ -d "$CLT/SDKs/MacOSX26.sdk" ]; then
+  export SDKROOT="$CLT/SDKs/MacOSX26.sdk"
+fi
 # リリース時は release.sh から渡される。手元のビルドでは 0.0.0 のままでよい
 VERSION="${OWLER_VERSION:-0.0.0}"
 SPARKLE_VERSION="2.9.5"
