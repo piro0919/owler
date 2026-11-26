@@ -101,7 +101,9 @@ enum SelfTest {
                 "成功なら次回だけ")
             check(line(run(at(10, 9), 1)).hasPrefix(Strings.failed(1) + " · "), "失敗は言葉で添える")
             check(line(run(at(8, 9), 0)).hasPrefix(Strings.lastRun("")), "予定の回が無ければ前回を出す")
-            check(line(nil).hasPrefix(Strings.noRuns + " · "), "まだ動いていないことも出す")
+            check(
+                line(nil) == Strings.nextRun(Format.near(at(11, 9), now: now, calendar: calendar)),
+                "まだ動いていないジョブにも文は添えず、次回だけ")
             check(
                 MenuBar.line(daily, run(at(9, 9), 0), missed: true, now: now, calendar: calendar)
                     .hasPrefix(Strings.missed + " · "),
@@ -257,7 +259,7 @@ enum SelfTest {
             older.seen = now
             check(daily.unseenRuns([newer, older]).isEmpty, "開いた回は未読から外す")
 
-            // --review の回は、新しい回を開けば古い回もまとめて見たことにする。頼んだ回は残す
+            // 新しい回を開けば古い未読の回もまとめて見たことにする。--review-each のジョブが頼んだ回だけは残す
             var day1 = run(at(8, 9), 0)
             day1.stamp = "1"
             var day2 = run(at(9, 9), 0)
@@ -266,14 +268,33 @@ enum SelfTest {
             var day3 = run(at(10, 9), 0)
             day3.stamp = "3"
             check(
-                watched.seenByOpening(day3, among: [day3, day2, day1]).map(\.stamp) == ["3", "1"],
-                "--review の回は古い回もまとめて既読、頼んだ回は残す")
+                watched.seenByOpening(day3, among: [day3, day2, day1]).map(\.stamp) == ["3", "2", "1"],
+                "--review の回は、頼んだ回も含めて古い回をまとめて既読")
+            var eachWatched = watched
+            eachWatched.reviewEach = true
+            check(
+                eachWatched.seenByOpening(day3, among: [day3, day2, day1]).map(\.stamp) == ["3", "1"],
+                "--review-each なら、頼んだ回は残す")
             check(
                 watched.seenByOpening(day1, among: [day3, day2, day1]).map(\.stamp) == ["1"],
                 "古い回を開いても新しい回は既読にしない")
             check(
-                daily.seenByOpening(day3, among: [day3, day2, day1]).isEmpty,
-                "--review でないジョブは、頼んだ回だけを開いたときに既読にする")
+                daily.seenByOpening(day3, among: [day3, day2, day1]).map(\.stamp) == ["2"],
+                "--review でないジョブも、新しい回を開けば古い頼んだ回を既読にする")
+            var each = daily
+            each.reviewEach = true
+            check(
+                each.seenByOpening(day3, among: [day3, day2, day1]).isEmpty,
+                "--review-each のジョブは、頼んだ回を開いたときだけ既読にする")
+            var day4 = run(at(10, 10), 0)
+            day4.stamp = "4"
+            day4.asked = true
+            check(
+                each.seenByOpening(day4, among: [day4, day3, day2, day1]).map(\.stamp) == ["4"],
+                "--review-each のジョブで頼んだ回を開いても、古い頼んだ回は既読にしない")
+            check(
+                daily.seenByOpening(day4, among: [day4, day3, day2, day1]).map(\.stamp) == ["4", "2"],
+                "頼んだ回を開けば、古い頼んだ回もまとめて既読")
 
             // 失敗と中断は「!」に数え、その回を開けば外す
             var broken = run(at(10, 9), 1)
@@ -470,6 +491,7 @@ enum SelfTest {
 
         oneOff()
         pause()
+        usability()
 
         print(failures == 0 ? "selftest: ok" : "selftest: \(failures) failed")
         return failures == 0 ? 0 : 1
@@ -506,6 +528,7 @@ enum SelfTest {
         let old = #"{"id":"a","summary":"","folder":"/tmp","command":["/bin/echo"],"schedule":[{"hour":9,"minute":0}]}"#
         let decoded = try? JSONDecoder().decode(Job.self, from: Data(old.utf8))
         check(decoded != nil && decoded?.on == nil && decoded?.paused == nil, "前の版の定義も読める")
+        check(decoded?.reviewEach == nil && decoded?.name == nil, "前の版の定義は、名前も --review-each も無い")
 
         let intervals = job.launchdPlist(owler: "/x/Owler")["StartCalendarInterval"] as? [[String: Int]]
         check(intervals == [["Month": 11, "Day": 27, "Hour": 12, "Minute": 0]], "1回だけのジョブは月と日も書く")
@@ -607,9 +630,18 @@ enum SelfTest {
         check(
             MenuBar.line(job, run(fire, 0), now: finished, calendar: calendar) == Strings.done,
             "済んだジョブの2行目は「済み」")
+        let onceLine = MenuBar.line(job, nil, now: now, calendar: calendar)
+        check(onceLine == Strings.onceRun(fire, now: now, calendar: calendar), "済む前は「明日 12:00 の1回」と出す")
+        check(!onceLine.hasPrefix(Strings.nextRun("")), "1回だけのジョブには「次回」と書かない")
         check(
-            MenuBar.line(job, nil, now: now, calendar: calendar).hasSuffix(
-                Strings.nextRun(Format.near(fire, now: now, calendar: calendar))), "済む前は次回を出す")
+            Strings.isJapanese ? onceLine.hasSuffix(" の1回") : onceLine.hasPrefix("Once, "),
+            "1回だけのジョブの2行目は「の1回」で終わる（英語は Once, で始まる）")
+        check(
+            Format.near(fire, now: now, calendar: calendar, locale: us, midSentence: true).hasPrefix("tomorrow "),
+            "英語で文の途中に置く明日は小文字")
+        check(
+            Format.near(fire, now: now, calendar: calendar, locale: us).hasPrefix("Tomorrow "),
+            "文の頭の明日は大文字のまま")
 
         // 手で動かした印。1分より古い印は数えない
         let marker = FileManager.default.temporaryDirectory.appendingPathComponent("owler-selftest-manual")
@@ -673,6 +705,78 @@ enum SelfTest {
         check(list.count == 2 && list["PID"] == nil, "見出しの行は読まない")
         check(list["io.kkweb.owler.job.a"] != nil && list["io.kkweb.owler.job.a"]! == nil, "動いていないジョブも入っている")
         check(list["io.kkweb.owler.job.b"]! == 123, "動いているジョブはプロセスの番号を読む")
+    }
+
+    /// 頼んだ理由・短い名前・状態の欄に文を置かないこと
+    private static func usability() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        func run(asked: Bool?, note: String?) -> RunRecord {
+            var record = RunRecord(stamp: "s", start: start, end: start, exitCode: 0, session: nil, pid: nil)
+            record.asked = asked
+            record.note = note
+            return record
+        }
+        var job = Job(
+            id: "replies", summary: "Bluesky の返信の下書きを作る", folder: "/tmp", command: ["/bin/echo"],
+            schedule: [Job.Slot(hour: 9, minute: 0, weekday: nil)])
+        job.reviewWhen = "返信の下書きを作ったとき"
+
+        // 頼んだ理由
+        check(
+            job.askedReason(run(asked: true, note: "\n  下書きが3件あります  \n2行目")) == "下書きが3件あります",
+            "頼んだ回には書いた中身の最初の行を添える")
+        check(job.askedReason(run(asked: true, note: "1")) == job.reviewWhen, "印だけ（1文字）なら一文で代える")
+        check(job.askedReason(run(asked: true, note: "ok")) == job.reviewWhen, "2文字までは一文で代える")
+        check(job.askedReason(run(asked: true, note: "下書き")) == "下書き", "3文字からは書いた中身を出す")
+        check(job.askedReason(run(asked: true, note: nil)) == job.reviewWhen, "中身を残していない前の版の回は一文で代える")
+        check(job.askedReason(run(asked: nil, note: nil)) == nil, "頼まなかった回には何も添えない")
+        var silent = job
+        silent.reviewWhen = nil
+        check(silent.askedReason(run(asked: true, note: "1")) == nil, "一文も無ければ、印だけの回には何も添えない")
+
+        // 書いた中身を残す
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("owler-selftest-note.review")
+        try? "  下書きが3件\n\n".write(to: file, atomically: true, encoding: .utf8)
+        check(RunStore.note(file) == "下書きが3件", "中身は前後の空白を落として残す")
+        try? String(repeating: "あ", count: 800).write(to: file, atomically: true, encoding: .utf8)
+        check(RunStore.note(file)?.count == RunRecord.noteLimit, "長い中身は頭の500文字まで")
+        try? " \n\t".write(to: file, atomically: true, encoding: .utf8)
+        check(RunStore.note(file) == nil, "空白だけなら中身は残さない")
+        try? FileManager.default.removeItem(at: file)
+        check(RunStore.note(file) == nil, "書かれなければ中身は無い")
+
+        // 回の記録の読み書き。前の版の記録（note が無い）も読める
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let noted = run(asked: true, note: "下書き")
+        let back = (try? encoder.encode(noted)).flatMap { try? decoder.decode(RunRecord.self, from: $0) }
+        check(back == noted, "中身つきの回を書いて読み戻せる")
+        let oldRun = #"{"stamp":"s","start":"2026-10-10T00:00:00Z","exitCode":0,"asked":true}"#
+        let oldDecoded = try? decoder.decode(RunRecord.self, from: Data(oldRun.utf8))
+        check(oldDecoded?.asked == true && oldDecoded?.note == nil, "前の版の回の記録も読める")
+
+        // 短い名前
+        check(job.displayName == job.summary, "名前が無ければ説明を出す")
+        check(job.summaryUnderName == nil, "名前が無ければ、題の下に説明を重ねない")
+        let named = job.named("  返信  ")
+        check(named.name == "返信" && named.displayName == "返信", "名前があれば名前を出す。前後の空白は落とす")
+        check(named.summaryUnderName == job.summary, "名前があれば、説明を題の下に添える")
+        check(named.named(" ").name == nil && named.named("").displayName == job.summary, "空の名前は外して説明に戻す")
+        var bare = named
+        bare.summary = ""
+        check(bare.summaryUnderName == nil, "説明が空なら題の下に何も添えない")
+        bare.name = nil
+        check(bare.displayName == "replies", "名前も説明も無ければ ID")
+        let encodedNamed = (try? JSONEncoder().encode(named)).map { String(decoding: $0, as: UTF8.self) } ?? ""
+        check(
+            (try? JSONDecoder().decode(Job.self, from: Data(encodedNamed.utf8)))?.name == "返信",
+            "名前を定義に書いて読み戻せる")
+
+        // 引数
+        check(CLI.parse(["a", "--review-each", "--folder", "/tmp"])?.one("review-each") != nil, "--review-each は値を取らない")
+        check(CLI.parse(["a", "--review-each", "--folder", "/tmp"])?.one("folder") == "/tmp", "--review-each の次も読める")
     }
 
     private static func check(_ condition: Bool, _ name: String) {

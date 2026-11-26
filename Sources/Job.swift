@@ -27,6 +27,11 @@ struct Job: Codable, Identifiable, Equatable {
     var on: Day?
     /// 利用者が止めたジョブ。launchd からは外し、plist は残す。再開で入れ直す。再開の日は持たない
     var paused: Bool?
+    /// ジョブが頼んだ回（RunRecord.asked）を、開いた回だけ見たことにするジョブ。返信の下書きのように、
+    /// 回ごとに中身が違うジョブのため。無ければ、どの回を開いても、それより古い未読の回をまとめて見たことにする
+    var reviewEach: Bool?
+    /// 一覧・メニュー・ページの題に出す短い名前。無ければ summary を出す。summary は説明として残す
+    var name: String?
 
     /// 動かす時刻。曜日が無ければ毎日。曜日は launchd と同じく 0 と 7 が日曜
     struct Slot: Codable, Equatable, Hashable {
@@ -142,12 +147,29 @@ struct Job: Codable, Identifiable, Equatable {
         runs.filter { awaitsReview($0) }
     }
 
-    /// その回を開いたときに、見たことにする回。`--review` のジョブは、それより古い未読の回もまとめて。
+    /// その回を開いたときに、見たことにする回。どのジョブも、それより古い未読の回もまとめて。
     /// 毎日の報告は新しい回で置き換わるので、溜まった古い回まで一つずつ開かせない。
-    /// ジョブが頼んだ回（asked）は回ごとに中身が違う（返信の下書きなど）ので、開いた回だけ
+    /// `--review-each` のジョブが頼んだ回（asked）は回ごとに中身が違う（返信の下書きなど）ので、開いた回だけ。
+    /// 初めは頼んだ回をいつも開いた回だけにしていた。回ごとに違うかはジョブによるので、足すときに選ぶ
     func seenByOpening(_ run: RunRecord, among runs: [RunRecord]) -> [RunRecord] {
-        let older = review == true ? unseenRuns(runs).filter { $0.stamp < run.stamp && $0.asked != true } : []
+        let older = unseenRuns(runs).filter { $0.stamp < run.stamp && !(reviewEach == true && $0.asked == true) }
         return (awaitsReview(run) || awaitsAcknowledgement(run) ? [run] : []) + older
+    }
+
+    /// 実行の表の行に添える、その回を見に来てほしい理由。ジョブが `OWLER_REVIEW_FILE` に書いた最初の行。
+    /// 「1」のように印だけを書くジョブ（2文字まで）は、足すときに書いた一文（reviewWhen）で代える。
+    /// 書いた中身を残していない前の版の回も一文で代える。頼まなかった回には何も添えない
+    func askedReason(_ run: RunRecord) -> String? {
+        guard run.asked == true else { return nil }
+        let note = run.note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if note.count > 2,
+            let line = note.split(whereSeparator: \.isNewline)
+                .map({ $0.trimmingCharacters(in: .whitespaces) }).first(where: { !$0.isEmpty })
+        {
+            return line
+        }
+        guard let reviewWhen, !reviewWhen.isEmpty else { return nil }
+        return reviewWhen
     }
 
     /// 30日に動く回数の見込み。曜日の決まった時刻は週に1回。1回だけのジョブは繰り返さないので 0
@@ -172,8 +194,25 @@ struct Job: Codable, Identifiable, Equatable {
         return CostEstimate(perRun: perRun, month: perRun * runsPerMonth * share)
     }
 
-    /// 画面に出す名前。説明があればそれ、無ければ ID
-    var displayName: String { summary.isEmpty ? id : summary }
+    /// 画面に出す名前。短い名前があればそれ、無ければ説明、それも無ければ ID
+    var displayName: String {
+        if let name, !name.isEmpty { return name }
+        return summary.isEmpty ? id : summary
+    }
+
+    /// ジョブのページで題の下に添える説明。短い名前が題になっているときだけ。名前が無ければ説明が題そのもの
+    var summaryUnderName: String? {
+        guard let name, !name.isEmpty, !summary.isEmpty else { return nil }
+        return summary
+    }
+
+    /// 短い名前を付け替えたジョブ。前後の空白は落とし、空なら名前を外して説明に戻す
+    func named(_ text: String) -> Job {
+        var job = self
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        job.name = trimmed.isEmpty ? nil : trimmed
+        return job
+    }
 
     static func isValidID(_ id: String) -> Bool {
         !id.isEmpty && id.allSatisfy { ($0.isASCII && ($0.isLowercase || $0.isNumber)) || $0 == "-" }
@@ -407,6 +446,20 @@ enum JobStore {
         }
         Reload.remember(job.id, program: owler)
         try save(job)
+    }
+
+    /// 短い名前を付け替える。定義だけを書き直し、launchd にも plist にも触らない。
+    /// 定義の更新時刻は「記録なし」を数え始める時刻（written）なので、書く前の時刻に戻す。
+    /// 戻さないと、名前を変えただけで、それより前の記録なしが表から消える
+    static func rename(_ id: String, to text: String) throws -> Job {
+        guard let job = load(id) else { throw Missing(id: id) }
+        let renamed = job.named(text)
+        let written = written(id)
+        try save(renamed)
+        if let written {
+            try? FileManager.default.setAttributes([.modificationDate: written], ofItemAtPath: Paths.job(id).path)
+        }
+        return renamed
     }
 
     /// 定義だけを書く。launchd には触らない

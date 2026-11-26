@@ -14,6 +14,12 @@ struct RunRecord: Codable, Equatable, Identifiable {
     var seen: Date?
     /// ジョブが `OWLER_REVIEW_FILE` に書いて、この回を見に来てほしいと伝えた。`--review` でないジョブでも印を出す
     var asked: Bool?
+    /// ジョブが `OWLER_REVIEW_FILE` に書いた中身。前後の空白を落とし、頭の `noteLimit` 文字まで。
+    /// 実行の表で、なぜ見に来てほしいのかを日時の横に出す（Job.askedReason）
+    var note: String?
+
+    /// 残す中身の長さ。表に出すのは最初の行だけなので、それを越える分は持たない
+    static let noteLimit = 500
 
     var id: String { stamp }
 
@@ -86,9 +92,13 @@ enum RunStore {
     }
 
     /// 目印に何か書かれていたか。空白だけなら書かなかったとみなす
-    static func asked(_ file: URL) -> Bool {
-        guard let data = try? Data(contentsOf: file) else { return false }
-        return !String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    static func asked(_ file: URL) -> Bool { note(file) != nil }
+
+    /// 目印に書かれた中身。前後の空白を落とし、頭の RunRecord.noteLimit 文字まで。空白だけなら nil
+    static func note(_ file: URL) -> String? {
+        guard let data = try? Data(contentsOf: file) else { return nil }
+        let text = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : String(text.prefix(RunRecord.noteLimit))
     }
 
     /// 新しい順
@@ -251,7 +261,10 @@ enum Runner {
             SessionWatcher.isAvailable
             ? Sessions.latest(watched ?? [], folder: folder)
             : Sessions.find(folder: folder, from: start, to: record.end!)
-        if RunStore.asked(reviewFile) { record.asked = true }
+        if let note = RunStore.note(reviewFile) {
+            record.asked = true
+            record.note = note
+        }
         try? fm.removeItem(at: reviewFile)
         try? RunStore.save(record, for: id)
         RunStore.prune(id)

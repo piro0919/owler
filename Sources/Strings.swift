@@ -82,7 +82,6 @@ enum Strings {
     static var command: String { t("コマンド", "Command") }
     static var runs: String { t("実行の記録", "Runs") }
     static var missed: String { t("記録なし", "No record") }
-    static var noRuns: String { t("まだ動いていません", "Not run yet") }
     static var running: String { t("実行中", "Running") }
     static var succeeded: String { t("成功", "Succeeded") }
     static func failed(_ code: Int32) -> String { t("失敗（終了コード \(code)）", "Failed (exit \(code))") }
@@ -130,6 +129,12 @@ enum Strings {
     }
     static func nextRun(_ when: String) -> String { t("次回 \(when)", "Next \(when)") }
     static func lastRun(_ when: String) -> String { t("前回 \(when)", "Last \(when)") }
+    /// 1回だけのジョブのメニューの2行目。「次回」と書くと、次の次もあるように読める
+    static func onceRun(_ date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
+        t(
+            "\(Format.near(date, now: now, calendar: calendar)) の1回",
+            "Once, \(Format.near(date, now: now, calendar: calendar, midSentence: true))")
+    }
     static func stateName(_ run: RunRecord) -> String {
         switch run.state {
         case .running: running
@@ -141,7 +146,6 @@ enum Strings {
     static var interrupted: String { t("中断", "Interrupted") }
     static var report: String { t("Claude の報告", "Claude's report") }
     static var output: String { t("出力", "Output") }
-    static var noOutput: String { t("出力はありません", "No output") }
 
     /// 新しい定期実行を相談するときの最初の一言
     static func newJobPrompt(owler: String) -> String {

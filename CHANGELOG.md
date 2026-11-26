@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.22]
+
+- Opening a run also marks the job's older unread runs as read, for jobs that ask for review only on some runs too. Before, each of those runs had to be opened one by one, and a daily report left a pile of unread runs. `--review-each` keeps the old behavior for jobs whose runs each ask about something different
+- A run that asked for review shows what the job wrote, or the job's "unread when" sentence, in its row on the job's page
+- Jobs can have a short name (`--name`, or `owler rename` for an existing job), used in the job list, the menu bar and the page title, with the summary under the title
+- The job page has a Run Now button next to Pause and Open in Claude Code. The details under the title use the page's full width
+- A one-off job reads "tomorrow 10:23, once" in the menu bar. "Not run yet", "No output" and the empty run table are gone
+
 ## [0.1.21]
 
 - A paused job in the menu bar shows "Paused" under its name again. In 0.1.20 the greyed-out name hid the second line

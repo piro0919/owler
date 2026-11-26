@@ -285,8 +285,15 @@ struct JobPage: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Header(title: job.displayName, details: details) {
+                // 短い名前を付けたジョブは、題が名前になるので、説明を題の下に灰色の1行で添える
+                Header(title: job.displayName, subtitle: job.summaryUnderName ?? "", details: details) {
                     HStack(spacing: 8) {
+                        // 動いているあいだは押せなくする。隠すと隣のボタンが横に動き、押そうとした位置がずれる。
+                        // 動いている回に kickstart を重ねても、新しい回は始まらない（man launchctl。-k を付けたときだけ
+                        // 動いている回を止めて起こし直す）ので、押せても何も起きない
+                        Button(Strings.runNow) { model.runNow(job.id) }
+                            .controlSize(.large)
+                            .disabled(running)
                         // 済んだ1回だけのジョブはもう起こされないので、止めるものが無い
                         if !model.done.contains(job.id) {
                             let stopped = model.stopped.contains(job.id)
@@ -295,20 +302,21 @@ struct JobPage: View {
                         }
                         OpenButton(model: model)
                     }
+                    // ボタンは文言の幅で描く。3つ並べたとき、窓が狭いと「Claude Code で開く」が「Claude Co…」と
+                    // 切れていた（2026-11-26）。縮めるのは左の題と説明のほう
+                    .fixedSize()
                 }
-                Card {
-                    if rows.isEmpty {
-                        Text(Strings.noRuns)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 36)
-                    } else {
+                // まだ動いていなくて記録なしの予定も無ければ、表も枠も出さない。「まだ動いていません」の文は要らない
+                if !rows.isEmpty {
+                    Card {
                         VStack(spacing: 0) {
                             ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                                 if index > 0 { Divider() }
                                 switch row {
                                 case .run(let run):
-                                    RunRow(run: run, unseen: job.awaitsReview(run)) { model.openedRunID = run.id }
+                                    RunRow(run: run, reason: job.askedReason(run), unseen: job.awaitsReview(run)) {
+                                        model.openedRunID = run.id
+                                    }
                                 case .missed(let fire):
                                     MissedRow(fire: fire)
                                 }
@@ -341,6 +349,9 @@ struct JobPage: View {
         }
     }
 
+    /// 回が動いている最中か。launchd が起こした直後で記録がまだ無いときは分からないので、記録で見る
+    private var running: Bool { model.runs.first?.state == .running }
+
     private var rows: [Row] {
         (model.runs.map(Row.run) + model.missed.map(Row.missed)).sorted { $0.time > $1.time }
     }
@@ -366,9 +377,11 @@ struct JobPage: View {
     }
 }
 
-/// 実行の表の1行。日時と状態だけ。押すとその回のページへ
+/// 実行の表の1行。日時と状態。ジョブが見に来てほしいと頼んだ回は、その理由を間に添える。押すとその回のページへ
 struct RunRow: View {
     let run: RunRecord
+    /// 頼んだ理由（Job.askedReason）。頼まなかった回は nil
+    var reason: String? = nil
     /// まだ見に来ていない回は日時を太字にする。一覧の名前と同じ
     var unseen = false
     let open: () -> Void
@@ -379,9 +392,17 @@ struct RunRow: View {
             HStack(spacing: 12) {
                 Text(Format.dateTime(run.start)).monospacedDigit()
                     .fontWeight(unseen ? .bold : nil)
+                    // 理由が長くても日時は削らない
+                    .layoutPriority(1)
+                if let reason {
+                    Text(reason)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
                 StateDot(state: run.state)
-                Text(Strings.stateName(run)).foregroundStyle(.secondary)
+                Text(Strings.stateName(run)).foregroundStyle(.secondary).layoutPriority(1)
                 Image(systemName: "chevron.right")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
@@ -445,14 +466,16 @@ struct RunPage: View {
                     }
                 }
 
+                // 出力が無ければ節ごと出さない。「出力はありません」の文は要らない
                 let tail = RunStore.tail(job.id, run.stamp)
-                Titled(Strings.output) {
-                    Text(tail.isEmpty ? Strings.noOutput : tail)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(tail.isEmpty ? .secondary : .primary)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(14)
+                if !tail.isEmpty {
+                    Titled(Strings.output) {
+                        Text(tail)
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(14)
+                    }
                 }
             }
             .padding(28)
@@ -477,17 +500,23 @@ struct Header<Trailing: View>: View {
     var dot: RunRecord.State? = nil
     @ViewBuilder let trailing: Trailing
 
+    // ボタンと横に並べるのは題だけにし、説明と項目はページの幅いっぱいに使う。ボタンが3つになったとき、
+    // 全部をボタンの左に詰めると、題が2行に折れ、予定の行が「毎日 10:17, 13:52, 17:…」と切れていた（2026-11-26）
     var body: some View {
-        HStack(alignment: .top, spacing: 16) {
-            VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 16) {
                 Text(title)
                     .font(.system(size: 24, weight: .bold))
                     .monospacedDigit()
                     .lineLimit(2)
+                Spacer(minLength: 0)
+                trailing
+            }
+            VStack(alignment: .leading, spacing: 6) {
                 if !subtitle.isEmpty {
                     HStack(spacing: 6) {
                         if let dot { StateDot(state: dot) }
-                        Text(subtitle).foregroundStyle(.secondary)
+                        Text(subtitle).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
                     }
                 }
                 if !details.isEmpty {
@@ -501,8 +530,6 @@ struct Header<Trailing: View>: View {
                     }
                 }
             }
-            Spacer(minLength: 0)
-            trailing
         }
     }
 }

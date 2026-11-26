@@ -195,11 +195,11 @@ final class MenuBar: NSObject, NSMenuDelegate {
         item.representedObject = job.id
         item.image = Self.dot(entry.run?.state, missed: entry.missed)
         item.toolTip = job.summary.isEmpty ? nil : job.summary
-        // 2行目に次回を出す。subtitle の無い版では1行に並べる
+        // 2行目に次回を出す。subtitle の無い版では1行に並べる。添えるものが無ければ2行目は出さない
         let line = Self.line(job, entry.run, missed: entry.missed, stopped: entry.stopped)
         if #available(macOS 14.4, *) {
-            item.subtitle = line
-        } else {
+            if !line.isEmpty { item.subtitle = line }
+        } else if !line.isEmpty {
             item.title = "\(job.displayName)  —  \(line)"
         }
         // 止めたジョブは灰色にする。押せば窓で開き、そこで再開できるので、押せなくはしない。
@@ -209,6 +209,7 @@ final class MenuBar: NSObject, NSMenuDelegate {
             let title = NSMutableAttributedString(
                 string: job.displayName,
                 attributes: [.foregroundColor: NSColor.secondaryLabelColor, .font: NSFont.menuFont(ofSize: 0)])
+            // 止めたジョブには必ず「停止中」が入るので、2行目が空になることは無い
             if #available(macOS 14.4, *) {
                 title.append(
                     NSAttributedString(
@@ -268,13 +269,16 @@ final class MenuBar: NSObject, NSMenuDelegate {
             {
                 parts.append(Strings.lastRun(Format.near(run.start, now: now, calendar: calendar)))
             }
-        } else {
-            parts.append(Strings.noRuns)
         }
+        // まだ動いていないジョブにも何も添えない。丸の灰色で分かり、「まだ動いていません」の文は状態の欄に重い
         if stopped {
             parts.append(Strings.paused)
         } else if let next = job.nextFire(after: now, calendar: calendar) {
-            parts.append(Strings.nextRun(Format.near(next, now: now, calendar: calendar)))
+            // 1回だけのジョブは「次回」と書くと次の次があるように読めるので、「明日 10:23 の1回」と書く
+            parts.append(
+                job.on != nil
+                    ? Strings.onceRun(next, now: now, calendar: calendar)
+                    : Strings.nextRun(Format.near(next, now: now, calendar: calendar)))
         } else if job.isDone(now: now, calendar: calendar) {
             parts.append(Strings.done)
         }

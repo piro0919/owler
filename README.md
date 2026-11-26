@@ -58,9 +58,12 @@ registers the job with Owler's command line:
   --summary "Sort the inbox" -- /bin/zsh ~/work/inbox/run.sh
 ```
 
+`--name` gives the job a short name for the job list, the menu bar and the title
+of its page; the summary then shows under the title. `rename` changes it later.
+
 Run `Owler help` for the rest: `import` takes over a launchd job you already
-have, `remove`, `start` (run now), `pause`, `resume`, `list`, and `open` (open
-the last run in Claude Code).
+have, `remove`, `start` (run now), `pause`, `resume`, `rename`, `list`, and
+`open` (open the last run in Claude Code).
 
 A job can also run just once: `--on 2026-11-27 --at 12:00` instead of a repeating
 schedule. After it runs, Owler takes it out of launchd and lists it under
@@ -125,11 +128,15 @@ notification; it only tells you something is waiting.
 
 A job can also ask for the dot on a single run. Owler passes a file path in
 `OWLER_REVIEW_FILE`; write anything to it, and if the run succeeds, it gets the
-dot, with or without `--review`. Each of these runs keeps its dot until you
-open that run itself. A job that only needs you now and then, such as
-one that drafts replies for you to approve, can stay quiet the rest of the time.
-Add it with `--review-when "<when>"` so its page in the window says when to
-expect it.
+dot, with or without `--review`. What the job wrote shows next to that run in
+the job's page, so you can tell which run to open. A job that only needs you now
+and then can stay quiet the rest of the time. Add it with
+`--review-when "<when>"` so its page in the window says when to expect it; if
+the job writes only a mark such as `1`, the run's row shows that sentence.
+
+Opening a run also clears the dots of the job's older runs. If each run asks
+about something different, such as drafts of replies for you to approve, add
+`--review-each`, and each run that asked keeps its dot until you open it.
 
 ## Building
 

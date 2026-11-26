@@ -5,21 +5,31 @@ enum CLI {
     static let usage = """
         Usage:
           owler add <id> --folder <dir> --at <HH:MM> [--at <HH:MM>...] [--weekdays <days> | --on <YYYY-MM-DD>]
-                    [--summary <text>] [--also-log <file>] [--review] [--review-when <text>]
-                    -- <command> [args...]
+                    [--name <text>] [--summary <text>] [--also-log <file>] [--review] [--review-when <text>]
+                    [--review-each] -- <command> [args...]
               Register a job and load it into launchd. <id> is lowercase letters, digits and '-'.
               <days> is like 1-5 or 0,6 (0 = Sunday). Omit it to run every day.
               --on runs the job once, on that date at the one --at time, and must be in the future.
               After that run Owler unloads it from launchd; the job stays listed as done until you remove it.
               If the Mac is asleep at that time, launchd runs it when the Mac wakes that same day. If the Mac is
               off, or wakes on a later day, it does not run by itself; use start.
-              Re-running add with the same <id> replaces the job. Times are local time.
+              Re-running add with the same <id> replaces the job, except that it keeps the job's --name
+              when you leave --name out. Times are local time.
+              --name is a short name shown in the job list, the menu bar menu and as the title of the job's page.
+              --summary stays as the description: it is shown under that title, or used as the name when there
+              is no --name.
               --review marks the menu bar icon with a dot after each successful run, until you open that run.
               Use it for jobs whose results you want to come and read, not for jobs that just need to succeed.
               Any job can also ask for the dot on a single run: Owler passes a file path in $OWLER_REVIEW_FILE,
               and if the job writes anything to it, that run gets the dot when it succeeds.
               If the job does this, say when with --review-when, in the language the user speaks, such as
               --review-when "返信の下書きを作ったとき". The Owler window shows it on the job's page.
+              What the job writes is kept with the run, and its first line is shown next to that run in the window,
+              so write a short reason such as "3 reply drafts". A job that only writes a mark such as "1" gets the
+              --review-when sentence there instead.
+              Opening a run also marks every older unread run of the job as read. --review-each keeps that from
+              happening to runs the job asked for: use it for jobs whose each asked run carries different content,
+              such as reply drafts. Opening a run then marks only that run as read.
               A bare command name such as `claude` is resolved to its full path through your PATH now,
               because launchd runs jobs with a minimal PATH.
           owler import <plist> --id <id> [--folder <dir>] [--summary <text>]
@@ -28,6 +38,9 @@ enum CLI {
               together with what went to StandardErrorPath. EnvironmentVariables are kept. A plist with other
               keys Owler cannot carry over is refused.
           owler remove <id>       Unload a job and delete it.
+          owler rename <id> <name>
+                                  Set the job's short name (--name) without re-adding it. It only rewrites the
+                                  job's definition; launchd is not touched. An empty <name> removes the name.
           owler start <id>        Run a job now, even if it is paused or done.
           owler pause <id>        Stop running a job on schedule until you resume it. A run in progress finishes.
           owler resume <id>       Put a paused job back on its schedule. Also reloads a job that was unloaded
@@ -59,6 +72,7 @@ enum CLI {
         case "add": return add(rest)
         case "import": return importJob(rest)
         case "remove": return withID(rest) { JobStore.remove($0) }
+        case "rename": return rename(rest)
         case "start": return attempt(rest) { try JobStore.runNow($0) }
         case "pause": return pause(rest)
         case "resume":
@@ -93,7 +107,7 @@ enum CLI {
 
     /// `--key value` を集め、`--` より後ろはそのまま残す
     /// 値を取らないオプション
-    static let flags: Set<String> = ["review"]
+    static let flags: Set<String> = ["review", "review-each"]
 
     static func parse(_ args: [String]) -> Options? {
         var options = Options()
@@ -125,7 +139,7 @@ enum CLI {
         guard let o = parse(args), let id = o.positional.first, let folder = o.one("folder"), !o.tail.isEmpty
         else { return fail(usage) }
         if let unknown = o.unknown(allowed: [
-            "folder", "at", "weekdays", "on", "summary", "also-log", "review", "review-when",
+            "folder", "at", "weekdays", "on", "name", "summary", "also-log", "review", "review-when", "review-each",
         ]) {
             return fail("Unknown option --\(unknown)")
         }
@@ -138,7 +152,7 @@ enum CLI {
         case .success(let value): schedule = value
         case .failure(let rejected): return fail(rejected.message)
         }
-        let job = Job(
+        let base = Job(
             id: id,
             summary: o.one("summary") ?? "",
             folder: absolute(folder),
@@ -147,7 +161,11 @@ enum CLI {
             alsoLogTo: o.one("also-log").map(absolute),
             review: o.one("review") == nil ? nil : true,
             reviewWhen: o.one("review-when"),
-            on: schedule.on)
+            on: schedule.on,
+            reviewEach: o.one("review-each") == nil ? nil : true)
+        // --name を省いて入れ直したときは、前の名前を引き継ぐ。`owler rename` で付けた名前を、
+        // 予定を直すための add で黙って消さない
+        let job = o.one("name").map { base.named($0) } ?? base.named(JobStore.load(id)?.name ?? "")
         let addsReview = job.review == true && JobStore.load(id)?.review != true
         let status = install(job)
         // あとから --review を付けたジョブは、それまでの回を見たことにする。でないと付けた途端に過去の回すべてに印が付く。
@@ -309,6 +327,18 @@ enum CLI {
         guard let id = args.first, JobStore.load(id) != nil else { return fail("No such job: \(args.first ?? "")") }
         do {
             try action(id)
+        } catch {
+            return fail("\(error)")
+        }
+        return 0
+    }
+
+    /// 短い名前を付け替える。名前に空白が入っていてもよいように、ID より後ろの引数をつなぐ
+    static func rename(_ args: [String]) -> Int32 {
+        guard let id = args.first, args.count >= 2 else { return fail(usage) }
+        do {
+            let job = try JobStore.rename(id, to: args.dropFirst().joined(separator: " "))
+            print(job.name.map { "Renamed \(id) to \($0)" } ?? "Removed the name of \(id)")
         } catch {
             return fail("\(error)")
         }
