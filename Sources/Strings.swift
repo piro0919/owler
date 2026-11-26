@@ -84,7 +84,9 @@ enum Strings {
     static var missed: String { t("記録なし", "No record") }
     static var running: String { t("実行中", "Running") }
     static var succeeded: String { t("成功", "Succeeded") }
-    static func failed(_ code: Int32) -> String { t("失敗（終了コード \(code)）", "Failed (exit \(code))") }
+    /// 回のページの状態の行に添える終了コード。メニューと実行の表は「失敗」だけにする。赤い丸と「失敗」で伝わり、
+    /// ほとんどのジョブは 1 を返すので、括弧で添えても足すものが無かった（2026-11-26）
+    static func exitCode(_ code: Int32) -> String { t("終了コード \(code)", "exit \(code)") }
     static var openOwler: String { t("Owler を開く", "Open Owler") }
     static var settings: String { t("設定…", "Settings…") }
     static var settingsTitle: String { t("設定", "Settings") }
@@ -123,7 +125,7 @@ enum Strings {
         switch run.state {
         case .running: running
         case .succeeded: succeeded
-        case .failed: failed(run.exitCode ?? 0)
+        case .failed: t("失敗", "Failed")
         case .interrupted: interrupted
         }
     }

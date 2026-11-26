@@ -84,6 +84,7 @@ enum SelfTest {
             let now = at(10, 12)
             check(Format.near(at(10, 15), now: now, calendar: calendar, locale: ja) == "今日 15:00", "今日は言葉にする")
             check(Format.near(at(11, 9), now: now, calendar: calendar, locale: ja) == "明日 9:00", "明日は言葉にする")
+            check(Format.near(at(9, 12), now: now, calendar: calendar, locale: ja) == "昨日 12:00", "昨日も言葉にする")
             check(
                 Format.near(at(11, 9), now: now, calendar: calendar, locale: us).hasPrefix("Tomorrow "),
                 "英語の明日")
@@ -99,7 +100,9 @@ enum SelfTest {
             check(
                 line(run(at(10, 9), 0)) == Strings.nextRun(Format.near(at(11, 9), now: now, calendar: calendar)),
                 "成功なら次回だけ")
-            check(line(run(at(10, 9), 1)).hasPrefix(Strings.failed(1) + " · "), "失敗は言葉で添える")
+            check(line(run(at(10, 9), 1)).hasPrefix(Strings.t("失敗", "Failed") + " · "), "失敗は言葉で添える")
+            check(
+                !line(run(at(10, 9), 1)).contains(Strings.exitCode(1)), "失敗に終了コードは添えない（回のページに出す）")
             check(line(run(at(8, 9), 0)).hasPrefix(Strings.lastRun("")), "予定の回が無ければ前回を出す")
             check(
                 line(nil) == Strings.nextRun(Format.near(at(11, 9), now: now, calendar: calendar)),

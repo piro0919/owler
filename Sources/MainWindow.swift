@@ -486,7 +486,9 @@ struct RunPage: View {
         let name = Strings.stateName(run)
         guard let end = run.end else { return name }
         let cost = model.cost(job: job, run: run).map(Strings.cost)
-        return [name, Format.duration(end.timeIntervalSince(run.start)), cost].compactMap { $0 }.joined(
+        // 終了コードは失敗した回だけ。調べるときの手がかりなので、メニューではなくここに出す
+        let code = run.state == .failed ? run.exitCode.map(Strings.exitCode) : nil
+        return [name, code, Format.duration(end.timeIntervalSince(run.start)), cost].compactMap { $0 }.joined(
             separator: " · ")
     }
 }

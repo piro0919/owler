@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.23]
+
+- A failed run reads "Failed" in the menu bar instead of "Failed (exit 1)". The exit code moves to the run's page, next to "Failed"
+- A time on the day before reads "Yesterday 12:17" in the menu bar, like "Today" and "Tomorrow", instead of a full date
+
 ## [0.1.22]
 
 - Opening a run also marks the job's older unread runs as read, for jobs that ask for review only on some runs too. Before, each of those runs had to be opened one by one, and a daily report left a pile of unread runs. `--review-each` keeps the old behavior for jobs whose runs each ask about something different

@@ -17,7 +17,9 @@ enum Format {
         let time = date.formatted(style.hour().minute())
         let days = calendar.dateComponents(
             [.day], from: calendar.startOfDay(for: now), to: calendar.startOfDay(for: date))
+        // 昨日も言葉にする。前回が前の日のとき「前回 11月25日(水) 12:17」と日付が出て長かった（2026-11-26）
         switch days.day {
+        case -1: return japanese ? "昨日 \(time)" : "\(midSentence ? "yesterday" : "Yesterday") \(time)"
         case 0: return japanese ? "今日 \(time)" : "\(midSentence ? "today" : "Today") \(time)"
         case 1: return japanese ? "明日 \(time)" : "\(midSentence ? "tomorrow" : "Tomorrow") \(time)"
         default: return date.formatted(style.month().day().weekday(.abbreviated).hour().minute())
