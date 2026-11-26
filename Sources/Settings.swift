@@ -9,6 +9,9 @@ struct SettingsPage: View {
     // ログイン項目はこのページの外でも変えられるので、開くたびに OS から読む
     @State private var launchesAtLogin = SMAppService.mainApp.status == .enabled
     @State private var launchFailed = false
+    // 入っているアプリはこのページの外で増減するので、開くたびに読む
+    @State private var editors = Editor.available
+    @State private var editor = Editor.preferred
 
     private var version: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "-"
@@ -32,6 +35,15 @@ struct SettingsPage: View {
                             .fixedSize()
                         }
                         Divider()
+                        SettingRow(Strings.openWith, note: editors.isEmpty ? Strings.noEditor : nil) {
+                            Picker("", selection: $editor) {
+                                ForEach(editors, id: \.self) { Text($0.label).tag(Optional($0)) }
+                            }
+                            .labelsHidden()
+                            .fixedSize()
+                            .disabled(editors.isEmpty)
+                        }
+                        Divider()
                         SettingRow(Strings.launchAtLogin, note: launchFailed ? Strings.launchFailed : nil) {
                             Toggle("", isOn: $launchesAtLogin).labelsHidden().toggleStyle(.switch)
                         }
@@ -45,6 +57,7 @@ struct SettingsPage: View {
             .padding(28)
         }
         .onChange(of: showsMenuBar) { _, on in Preferences.showsMenuBar = on }
+        .onChange(of: editor) { _, chosen in if let chosen { Editor.preferred = chosen } }
         // 言語を変えると窓の中身ごと作り直される（AppDelegate）
         .onChange(of: language) { _, chosen in Language.chosen = chosen }
         .onChange(of: launchesAtLogin) { _, on in setLaunchAtLogin(on) }

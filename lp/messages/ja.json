@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Owler — 定期実行を見張る Mac アプリ",
-    "description": "launchd で動かしている定期実行を一覧にして、実行のたびに結果を記録する Mac アプリ。気になる実行は、Cursor や VS Code の Claude Code でそのまま調べられます。"
+    "description": "launchd で動かしている定期実行を一覧にして、実行のたびに結果を記録する Mac アプリ。気になる実行は、Cursor や VS Code、Claude のデスクトップアプリの Claude Code でそのまま調べられます。"
   },
   "hero": {
     "tagline": [
@@ -10,12 +10,12 @@
     ],
     "lead": [
       "作るのも、結果を調べるのも、",
-      "Cursor や VS Code の Claude Code で。"
+      "Cursor・VS Code・Claude デスクトップアプリの Claude Code で。"
     ],
     "points": [
       "launchd で実行",
       "実行履歴をすべて保存",
-      "Cursor・VS Code で作成と調査"
+      "Cursor・VS Code・Claude デスクトップアプリで作成と調査"
     ],
     "download": "無料でダウンロード",
     "requirement": "macOS 14 以降・Apple シリコン"
@@ -23,7 +23,7 @@
   "product": {
     "title": "昨夜の結果は、朝いちばんに。",
     "statement": "AI に任せた毎朝の作業も、夜のバックアップも、実行のたびに結果を記録します。",
-    "statementMuted": "気になる実行は、Cursor や VS Code の Claude Code でそのまま調べられます。",
+    "statementMuted": "気になる実行は、Cursor や VS Code、Claude のデスクトップアプリの Claude Code でそのまま調べられます。",
     "label": "主な機能",
     "items": [
       {
@@ -35,8 +35,8 @@
         "body": "ジョブの中で Claude Code を動かした場合は、その最後の報告と、かかった料金の目安を表示します。"
       },
       {
-        "title": "Cursor・VS Code に対応",
-        "body": "ジョブのフォルダをエディタで開いて、Claude Code の会話を始めます。"
+        "title": "Cursor・VS Code・Claude デスクトップアプリに対応",
+        "body": "ジョブのフォルダで Claude Code の会話を始めます。開く先は設定で選べます。"
       },
       {
         "title": "作るのも AI と",

@@ -452,11 +452,20 @@ enum SelfTest {
 
         // エディタに渡す URL
         do {
-            let url = Editor.cursor.claudeURL(session: "abc", prompt: "見て & 直して")?.absoluteString
+            let url = Editor.cursor.claudeURL(folder: "/tmp/a", session: "abc", prompt: "見て & 直して")?.absoluteString
             check(
                 url
                     == "cursor://anthropic.claude-code/open?session=abc&prompt=%E8%A6%8B%E3%81%A6%20%26%20%E7%9B%B4%E3%81%97%E3%81%A6",
                 "セッションと最初の一言を渡す")
+            let desktop = Editor.claudeDesktop.claudeURL(folder: "/Users/a/b c", session: "abc", prompt: "1+1 は?")?
+                .absoluteString
+            check(
+                desktop == "claude://code/new?folder=%2FUsers%2Fa%2Fb%20c&q=1%2B1%20%E3%81%AF%3F",
+                "デスクトップアプリにはフォルダと一言目を渡し、+ も符号にする")
+            check(
+                Editor.claudeDesktop.claudeURL(folder: nil, session: nil, prompt: nil)?.absoluteString
+                    == "claude://code/new",
+                "何も無ければ新しい会話を開くだけ")
         }
 
         print(failures == 0 ? "selftest: ok" : "selftest: \(failures) failed")

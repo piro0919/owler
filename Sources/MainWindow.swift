@@ -128,7 +128,7 @@ final class Model: ObservableObject {
     func openInEditor() {
         guard let job else { return }
         markSeen()
-        Editor.installed?.open(job: job, run: run)
+        Editor.preferred?.open(job: job, run: run)
     }
 
     func openSettings() {
@@ -137,7 +137,7 @@ final class Model: ObservableObject {
     }
 
     func newJob() {
-        Editor.installed?.open(folder: nil, session: nil, prompt: Strings.newJobPrompt(owler: CLI.executable))
+        Editor.preferred?.open(folder: nil, session: nil, prompt: Strings.newJobPrompt(owler: CLI.executable))
     }
 }
 
@@ -455,11 +455,13 @@ struct OpenButton: View {
     @ObservedObject var model: Model
 
     var body: some View {
+        // アプリの場所を問い合わせるので、描くたびに1回だけ
+        let missing = Editor.preferred == nil
         Button(Strings.openInEditor, action: model.openInEditor)
             .controlSize(.large)
             .buttonStyle(.borderedProminent)
-            .disabled(Editor.installed == nil)
-            .help(Editor.installed == nil ? Strings.noEditor : "")
+            .disabled(missing)
+            .help(missing ? Strings.noEditor : "")
     }
 }
 

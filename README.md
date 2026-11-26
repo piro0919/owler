@@ -1,7 +1,7 @@
 # Owler
 
 A macOS app that keeps an eye on your scheduled jobs, and opens any run in
-Claude Code inside Cursor or VS Code.
+Claude Code inside Cursor, VS Code or the Claude desktop app.
 
 Put a few jobs on launchd — a nightly `claude -p` that goes through your inbox,
 a script that fetches something every evening — and you soon lose track of how
@@ -88,6 +88,11 @@ The Claude Code extension does not reopen sessions created by `claude -p`, so
 **Open in Claude Code** starts a new conversation and puts the transcript and
 log paths in its first message. The message is not sent; you read it, edit it if
 you like, and send it.
+
+**Open Claude Code In** in Settings picks where that conversation opens: Cursor,
+VS Code, or the Claude desktop app, among the ones installed. With the desktop
+app, the conversation opens in its Code tab with the job's folder; the app
+shows its folder list so you can check the folder before you send.
 
 ## Menu bar
 

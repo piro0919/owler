@@ -61,7 +61,12 @@ enum Strings {
     static var newJob: String { t("新しい定期実行", "New Job") }
     static var runNow: String { t("今すぐ実行", "Run Now") }
     static var openInEditor: String { t("Claude Code で開く", "Open in Claude Code") }
-    static var noEditor: String { t("Cursor も VS Code も見つかりません", "Neither Cursor nor VS Code is installed") }
+    static var noEditor: String {
+        t("Cursor も VS Code も Claude デスクトップアプリも見つかりません", "None of Cursor, VS Code or the Claude desktop app is installed")
+    }
+    /// 設定の項目名。窓のボタンが「Claude Code で開く」なので、それを押したときの話だと分かる名前にする
+    static var openWith: String { t("Claude Code を開くアプリ", "Open Claude Code In") }
+    static var claudeDesktop: String { t("Claude デスクトップアプリ", "Claude desktop app") }
     static var schedule: String { t("時刻", "Schedule") }
     static var next: String { t("次回", "Next") }
     static var folder: String { t("フォルダ", "Folder") }

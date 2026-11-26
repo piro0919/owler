@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Owler — keeps watch over your scheduled jobs",
-    "description": "A Mac app that lists the jobs you run on launchd and records the result of every run. Investigate any run with Claude Code in Cursor or VS Code."
+    "description": "A Mac app that lists the jobs you run on launchd and records the result of every run. Investigate any run with Claude Code in Cursor, VS Code or the Claude desktop app."
   },
   "hero": {
     "tagline": [
@@ -10,12 +10,12 @@
     ],
     "lead": [
       "Set them up and dig into the results",
-      "with Claude Code in Cursor or VS Code."
+      "with Claude Code in Cursor, VS Code or the Claude desktop app."
     ],
     "points": [
       "Runs on launchd",
       "Keeps every run",
-      "Set up and investigate in Cursor or VS Code"
+      "Set up and investigate in Cursor, VS Code or the Claude desktop app"
     ],
     "download": "Download for free",
     "requirement": "macOS 14 or later · Apple silicon"
@@ -23,7 +23,7 @@
   "product": {
     "title": "See last night's runs first thing in the morning.",
     "statement": "Morning tasks handed to AI, nightly backups: every run is recorded.",
-    "statementMuted": "Investigate any of them with Claude Code in Cursor or VS Code.",
+    "statementMuted": "Investigate any of them with Claude Code in Cursor, VS Code or the Claude desktop app.",
     "label": "Features",
     "items": [
       {
@@ -35,8 +35,8 @@
         "body": "When a job runs Claude Code, its last message is shown with the run, along with roughly what it cost."
       },
       {
-        "title": "Cursor and VS Code",
-        "body": "Opens the job's folder in your editor and starts a Claude Code conversation there."
+        "title": "Cursor, VS Code and the Claude desktop app",
+        "body": "Starts a Claude Code conversation in the job's folder. Choose where it opens in Settings."
       },
       {
         "title": "Set up with AI",

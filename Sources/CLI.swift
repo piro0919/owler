@@ -26,7 +26,7 @@ enum CLI {
           owler remove <id>       Unload a job and delete it.
           owler start <id>        Run a job now.
           owler list              Show jobs and their last run.
-          owler open <id>         Open the last run in Claude Code (Cursor or VS Code).
+          owler open <id>         Open the last run in Claude Code (the app chosen in Settings: Cursor, VS Code or the Claude desktop app).
           owler run <id>          Used by launchd. Runs the job and records it.
 
         A run that starts `claude -p` in the job's folder is linked to that Claude Code session,
@@ -222,7 +222,7 @@ enum CLI {
 
     static func open(_ args: [String]) -> Int32 {
         guard let id = args.first, let job = JobStore.load(id) else { return fail("No such job: \(args.first ?? "")") }
-        guard let editor = Editor.installed else { return fail("Neither Cursor nor VS Code is installed") }
+        guard let editor = Editor.preferred else { return fail("None of Cursor, VS Code or the Claude desktop app is installed") }
         // 窓が前に来るのを待ってから URL を渡すので、渡し終えるまで終わらずに待つ
         nonisolated(unsafe) var finished = false
         let run = RunStore.all(id, limit: 1).first
