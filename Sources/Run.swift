@@ -58,6 +58,33 @@ enum RunStore {
         Paths.runs(id).appendingPathComponent("\(stamp).review")
     }
 
+    /// 今すぐ実行で起こした印。launchd の起こし方（時刻か kickstart か）は Owler run から見分けられないので、
+    /// 起こす側が置き、Owler run が読んで消す。止めたジョブや済んだ1回だけのジョブは、これがあるときだけ動かす
+    static func manualRequest(_ id: String) -> URL {
+        Paths.runs(id).appendingPathComponent("manual")
+    }
+
+    static func requestManual(_ id: String) {
+        try? FileManager.default.createDirectory(at: Paths.runs(id), withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: manualRequest(id).path, contents: nil)
+    }
+
+    static func cancelManual(_ id: String) {
+        try? FileManager.default.removeItem(at: manualRequest(id))
+    }
+
+    /// 印を読んで消す。起こしてから1分より古い印は、起こし損ねた残りとみなして数えない
+    static func takeManual(_ id: String, now: Date = Date()) -> Bool {
+        takeManual(at: manualRequest(id), now: now)
+    }
+
+    static func takeManual(at url: URL, now: Date = Date()) -> Bool {
+        guard let made = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+        else { return false }
+        try? FileManager.default.removeItem(at: url)
+        return now.timeIntervalSince(made) < 60
+    }
+
     /// 目印に何か書かれていたか。空白だけなら書かなかったとみなす
     static func asked(_ file: URL) -> Bool {
         guard let data = try? Data(contentsOf: file) else { return false }
@@ -90,6 +117,8 @@ enum RunStore {
     /// 予定の時刻に記録の無い回（Job.missedFires）。新しい順。`runs` は新しい順で、読んだ数が `limit` に
     /// 達していれば、いちばん古い回より前は見ない。消した記録の時刻まで「記録なし」にしないため
     @MainActor static func missed(_ job: Job, runs: [RunRecord], limit: Int) -> [Date] {
+        // Owler の外で launchd から外されたジョブも、止めたジョブと同じく数えない
+        if job.isStopped(loaded: LoadedJobs.shared.isLoaded(job.id)) { return [] }
         guard var since = JobStore.written(job.id) else { return [] }
         if runs.count >= limit, let oldest = runs.last { since = max(since, oldest.start) }
         return job.missedFires(runs: runs, since: since) { PowerLog.shared.awake(at: $0) }
@@ -150,6 +179,13 @@ enum Runner {
         guard let job = JobStore.load(id), let executable = job.command.first else {
             FileHandle.standardError.write(Data("Owler: no such job: \(id)\n".utf8))
             return 2
+        }
+        // 止めたジョブや、その日以外に起こされた1回だけのジョブは動かさない。記録も残さない。
+        // launchd から外し直す（外す前に時刻が来た・1回だけのジョブを外し損ねて翌年に起こされた）
+        let manual = RunStore.takeManual(id)
+        if !manual, job.skipsFire() {
+            if job.unloadsAfterRun() { unloadSelf(id) }
+            return 0
         }
         let fm = FileManager.default
         try? fm.createDirectory(at: Paths.runs(id), withIntermediateDirectories: true)
@@ -219,7 +255,20 @@ enum Runner {
         try? fm.removeItem(at: reviewFile)
         try? RunStore.save(record, for: id)
         RunStore.prune(id)
+        // 済んだ1回だけのジョブと、動いている最中に止めたジョブは、launchd から外す。定義は読み直す。
+        // 回のあいだに止められたかもしれないので
+        if let current = JobStore.load(id), current.unloadsAfterRun() { unloadSelf(id) }
         return status
+    }
+
+    /// 自分のラベルを launchd から外す。必ず最後に呼ぶ。
+    /// 動いているジョブを bootout すると、launchd はそのプロセスに SIGTERM を送る（2026-11-26 に試した。
+    /// 受けなければ launchctl が返る前に止まり、それでも外れてはいる）。plist を消してから外す手もあるが、
+    /// 消すと再開や今すぐ実行で入れ直せなくなる。なので記録を書き終えてから、SIGTERM を無視して外し、
+    /// そのまま終わる
+    static func unloadSelf(_ id: String) {
+        signal(SIGTERM, SIG_IGN)
+        Launchctl.bootout(Paths.label(id))
     }
 }
 

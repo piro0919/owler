@@ -22,6 +22,20 @@ enum Format {
         }
     }
 
+    /// 1回だけのジョブの予定。「11月27日(金) 12:00 の1回」「Once on Fri, Nov 27 at 12:00 PM」。
+    /// 今年でなければ年も書く
+    static func once(
+        _ date: Date, now: Date = Date(), calendar: Calendar = .current, locale: Locale = Strings.locale
+    ) -> String {
+        let japanese = locale.language.languageCode?.identifier == "ja"
+        let style = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
+        let sameYear = calendar.component(.year, from: date) == calendar.component(.year, from: now)
+        let day = date.formatted(
+            sameYear ? style.month().day().weekday(.abbreviated) : style.year().month().day().weekday(.abbreviated))
+        let time = date.formatted(style.hour().minute())
+        return japanese ? "\(day) \(time) の1回" : "Once on \(day) at \(time)"
+    }
+
     /// 時刻だけ。日本語なら 3:33、アメリカの英語なら 3:33 AM
     static func timeOfDay(hour: Int, minute: Int, locale: Locale = Strings.locale) -> String {
         var calendar = Calendar(identifier: .gregorian)

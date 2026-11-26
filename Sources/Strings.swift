@@ -60,6 +60,15 @@ enum Strings {
     }
     static var newJob: String { t("新しい定期実行", "New Job") }
     static var runNow: String { t("今すぐ実行", "Run Now") }
+    static var pause: String { t("止める", "Pause") }
+    static var resume: String { t("再開", "Resume") }
+    /// 止めたジョブと、Owler の外で launchd から外されたジョブ。次回の代わりに出す
+    static var paused: String { t("停止中", "Paused") }
+    /// 時刻を過ぎた1回だけのジョブ。窓の一覧の見出しと、メニューの2行目
+    static var done: String { t("済み", "Done") }
+    static var pauseFailed: String { t("止められませんでした", "Could not pause the job") }
+    static var resumeFailed: String { t("再開できませんでした", "Could not resume the job") }
+    static var runNowFailed: String { t("実行できませんでした", "Could not run the job") }
     static var openInEditor: String { t("Claude Code で開く", "Open in Claude Code") }
     static var noEditor: String {
         t("Cursor も VS Code も Claude デスクトップアプリも見つかりません", "None of Cursor, VS Code or the Claude desktop app is installed")

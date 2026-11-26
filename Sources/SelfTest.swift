@@ -468,8 +468,211 @@ enum SelfTest {
                 "何も無ければ新しい会話を開くだけ")
         }
 
+        oneOff()
+        pause()
+
         print(failures == 0 ? "selftest: ok" : "selftest: \(failures) failed")
         return failures == 0 ? 0 : 1
+    }
+
+    private static var tokyo: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Tokyo")!
+        return calendar
+    }
+
+    /// 1回だけ動かすジョブ（`--on`）
+    private static func oneOff() {
+        let calendar = tokyo
+        func at(_ month: Int, _ day: Int, _ hour: Int, _ minute: Int = 0, year: Int = 2026) -> Date {
+            calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour, minute: minute))!
+        }
+        func run(_ start: Date, _ code: Int32?) -> RunRecord {
+            RunRecord(stamp: "s", start: start, end: code == nil ? nil : start, exitCode: code, session: nil, pid: nil)
+        }
+        let day = Job.Day("2026-11-27", calendar: calendar)
+        check(day == Job.Day(year: 2026, month: 11, day: 27), "日付を読む")
+        check(Job.Day("2026-02-30", calendar: calendar) == nil, "無い日は読まない")
+        check(Job.Day("2026-11", calendar: calendar) == nil && Job.Day("x-1-2", calendar: calendar) == nil, "形の違う日付は読まない")
+        let job = Job(
+            id: "once", summary: "", folder: "/tmp", command: ["/bin/echo"],
+            schedule: [Job.Slot(hour: 12, minute: 0, weekday: nil)], on: day)
+        let fire = at(11, 27, 12)
+
+        // 定義の読み書き。日付は文字で書き、前の版の定義（on・paused が無い）も読める
+        let encoded = (try? JSONEncoder().encode(job)).map { String(decoding: $0, as: UTF8.self) } ?? ""
+        check(encoded.contains(#""on":"2026-11-27""#), "定義には日付を文字で書く")
+        check((try? JSONDecoder().decode(Job.self, from: Data(encoded.utf8))) == job, "書いた定義を読み戻せる")
+        let old = #"{"id":"a","summary":"","folder":"/tmp","command":["/bin/echo"],"schedule":[{"hour":9,"minute":0}]}"#
+        let decoded = try? JSONDecoder().decode(Job.self, from: Data(old.utf8))
+        check(decoded != nil && decoded?.on == nil && decoded?.paused == nil, "前の版の定義も読める")
+
+        let intervals = job.launchdPlist(owler: "/x/Owler")["StartCalendarInterval"] as? [[String: Int]]
+        check(intervals == [["Month": 11, "Day": 27, "Hour": 12, "Minute": 0]], "1回だけのジョブは月と日も書く")
+
+        check(job.oneOffFire(calendar: calendar) == fire, "その日の時刻に動く")
+        check(job.nextFire(after: at(11, 26, 9), calendar: calendar) == fire, "次回はその日時")
+        check(job.nextFire(after: at(11, 27, 13), calendar: calendar) == nil, "過ぎたら次回は無い。翌年には動かさない")
+        check(job.previousFire(before: at(11, 27, 13), calendar: calendar) == fire, "過ぎたら前回の予定はその日時")
+        check(job.previousFire(before: at(11, 27, 11), calendar: calendar) == nil, "その前には前回の予定は無い")
+        check(!job.isDone(now: at(11, 27, 11), calendar: calendar), "時刻の前は済んでいない")
+        check(job.isDone(now: at(11, 27, 12), calendar: calendar), "時刻を過ぎたら済み")
+
+        // launchd に年が無いので、翌年の同じ日に起こされても動かさない
+        check(!job.skipsFire(now: at(11, 27, 12), calendar: calendar), "その日に起こされたら動かす")
+        check(!job.skipsFire(now: at(11, 27, 12, 10), calendar: calendar), "10分遅れまでなら動かす")
+        check(
+            job.skipsFire(now: at(11, 27, 12, 11), calendar: calendar),
+            "眠っていて過ぎ、それより遅れて起こされた回は、同じ日でも動かさない（記録なしにして人が決める）")
+        check(job.skipsFire(now: at(11, 27, 18), calendar: calendar), "夕方に起こされても動かさない")
+        check(job.skipsFire(now: at(11, 27, 12, year: 2027), calendar: calendar), "翌年に起こされても動かさない")
+        check(job.unloadsAfterRun(now: at(11, 27, 12, 5), calendar: calendar), "動いたあとは launchd から外す")
+        check(!job.unloadsAfterRun(now: at(11, 20, 12), calendar: calendar), "その日より前に手で動かしても外さない")
+        var daily = job
+        daily.on = nil
+        check(!daily.skipsFire(now: at(11, 27, 12, year: 2027), calendar: calendar), "繰り返すジョブはいつでも動かす")
+        check(!daily.unloadsAfterRun(now: at(11, 27, 13), calendar: calendar), "繰り返すジョブは外さない")
+
+        // 念のための片付け
+        let after = at(11, 27, 12, 30)
+        check(!job.leftLoaded(lastRun: nil, now: at(11, 27, 12, 5), calendar: calendar), "遅れても動かす幅の中はまだ外さない")
+        check(job.leftLoaded(lastRun: nil, now: after, calendar: calendar), "幅を過ぎて記録が無ければ外す")
+        check(job.leftLoaded(lastRun: nil, now: at(11, 28, 9), calendar: calendar), "その日が終わったら外す")
+        check(job.leftLoaded(lastRun: run(fire, 0), now: after, calendar: calendar), "時刻のあとに終わった回があれば外す")
+        check(
+            !job.leftLoaded(lastRun: run(at(11, 20, 9), 0), now: at(11, 27, 12, 5), calendar: calendar),
+            "幅の中なら、前に手で動かした回だけでは外さない")
+        check(
+            !job.leftLoaded(
+                lastRun: RunRecord(stamp: "s", start: fire, pid: getpid()), now: at(11, 28, 9), calendar: calendar),
+            "動いている回があれば外さない")
+        check(!job.leftLoaded(lastRun: nil, now: at(11, 26, 9), calendar: calendar), "時刻の前は外さない")
+        check(!daily.leftLoaded(lastRun: nil, now: at(11, 28, 9), calendar: calendar), "繰り返すジョブは外さない")
+
+        // 記録なし
+        let awake = { (_: Date) -> Bool? in true }
+        check(
+            job.missedFires(runs: [], since: at(11, 1, 0), now: after, calendar: calendar, awake: awake) == [fire],
+            "起きていたのに動かなければ記録なし")
+        check(
+            job.missedFires(runs: [run(fire, 0)], since: at(11, 1, 0), now: after, calendar: calendar, awake: awake)
+                .isEmpty, "動いた回があれば記録なしにしない")
+        check(
+            job.missedFires(runs: [], since: at(11, 1, 0), now: after, calendar: calendar) { _ in false }.isEmpty,
+            "眠っていた時刻なら記録なしにしない")
+
+        // 料金の見込みは繰り返さない
+        check(job.runsPerMonth == 0, "1回だけのジョブは月の回数に数えない")
+        check(job.costEstimate([2]) == Job.CostEstimate(perRun: 2, month: 0), "1回だけのジョブの月の見込みは 0")
+
+        // 予定の書き方
+        let ja = Locale(identifier: "ja_JP")
+        let us = Locale(identifier: "en_US")
+        let now = at(11, 26, 9)
+        check(job.scheduleText(locale: ja, now: now, calendar: calendar) == "11月27日(金) 12:00 の1回", "日本語の1回だけの予定")
+        check(
+            job.scheduleText(locale: us, now: now, calendar: calendar).replacingOccurrences(of: "\u{202F}", with: " ")
+                == "Once on Fri, Nov 27 at 12:00 PM", "英語の1回だけの予定")
+        check(
+            job.scheduleText(locale: ja, now: at(12, 1, 9, year: 2025), calendar: calendar).hasPrefix("2026年"),
+            "今年でなければ年も書く")
+
+        // 引数
+        let schedule = { (at: [String], weekdays: [String]?, on: [String]?) in
+            CLI.schedule(at: at, weekdays: weekdays, on: on, now: now, calendar: calendar)
+        }
+        if case .success(let value) = schedule(["12:00"], nil, ["2026-11-27"]) {
+            check(value.on == day && value.slots == [Job.Slot(hour: 12, minute: 0, weekday: nil)], "--on と --at を読む")
+        } else {
+            check(false, "--on と --at を読む")
+        }
+        func rejected(_ result: Result<(slots: [Job.Slot], on: Job.Day?), CLI.Rejected>) -> Bool {
+            if case .failure = result { return true }
+            return false
+        }
+        check(rejected(schedule(["12:00", "18:00"], nil, ["2026-11-27"])), "--on には --at を1つだけ")
+        check(rejected(schedule(["12:00"], ["1-5"], ["2026-11-27"])), "--on と --weekdays は一緒に使えない")
+        check(rejected(schedule(["8:00"], nil, ["2026-11-26"])), "過ぎた日時は断る")
+        check(rejected(schedule(["12:00"], nil, ["2026-02-30"])), "無い日は断る")
+        check(rejected(schedule(["12:00"], nil, ["2026-11-27", "2026-11-28"])), "--on は1つだけ")
+        check(!rejected(schedule(["9:00", "18:00"], ["1-5"], nil)), "--on が無ければ今までどおり")
+
+        // メニューバー
+        let finished = after
+        check(!MenuBar.shows(job, run(fire, 0), unseen: false, missed: false, now: finished, calendar: calendar), "済んだジョブはメニューに出さない")
+        check(MenuBar.shows(job, run(fire, 0), unseen: true, missed: false, now: finished, calendar: calendar), "未読の回があれば出す")
+        check(MenuBar.shows(job, run(fire, 1), unseen: false, missed: false, now: finished, calendar: calendar), "開いていない失敗があれば出す")
+        check(MenuBar.shows(job, nil, unseen: false, missed: true, now: finished, calendar: calendar), "記録なしなら出す")
+        check(MenuBar.shows(job, nil, unseen: false, missed: false, now: now, calendar: calendar), "済む前は出す")
+        check(
+            MenuBar.line(job, run(fire, 0), now: finished, calendar: calendar) == Strings.done,
+            "済んだジョブの2行目は「済み」")
+        check(
+            MenuBar.line(job, nil, now: now, calendar: calendar).hasSuffix(
+                Strings.nextRun(Format.near(fire, now: now, calendar: calendar))), "済む前は次回を出す")
+
+        // 手で動かした印。1分より古い印は数えない
+        let marker = FileManager.default.temporaryDirectory.appendingPathComponent("owler-selftest-manual")
+        FileManager.default.createFile(atPath: marker.path, contents: nil)
+        check(RunStore.takeManual(at: marker), "手で動かした印を読む")
+        check(!FileManager.default.fileExists(atPath: marker.path), "読んだ印は消す")
+        check(!RunStore.takeManual(at: marker), "印が無ければ手で動かした回ではない")
+        FileManager.default.createFile(atPath: marker.path, contents: nil)
+        check(!RunStore.takeManual(at: marker, now: Date().addingTimeInterval(120)), "古い印は数えない")
+    }
+
+    /// 止める・再開する
+    private static func pause() {
+        let calendar = tokyo
+        func at(_ day: Int, _ hour: Int) -> Date {
+            calendar.date(from: DateComponents(year: 2026, month: 10, day: day, hour: hour))!
+        }
+        let now = at(10, 12)
+        var daily = Job(
+            id: "a", summary: "", folder: "/tmp", command: ["/bin/echo"],
+            schedule: [Job.Slot(hour: 9, minute: 0, weekday: nil)])
+        var paused = daily
+        paused.paused = true
+
+        check(paused.isStopped(loaded: false, now: now) && paused.isStopped(loaded: nil, now: now), "止めたジョブは停止中")
+        check(daily.isStopped(loaded: false, now: now), "Owler の外で launchd から外されたジョブも停止中")
+        check(!daily.isStopped(loaded: true, now: now), "入っていれば停止中ではない")
+        check(!daily.isStopped(loaded: nil, now: now), "入っているか分からなければ停止中にしない")
+        var once = daily
+        once.on = Job.Day(year: 2026, month: 10, day: 9)
+        check(!once.isStopped(loaded: false, now: now, calendar: calendar), "済んだ1回だけのジョブは外れていても停止中にしない")
+
+        let awake = { (_: Date) -> Bool? in true }
+        check(
+            paused.missedFires(runs: [], since: at(8, 12), now: now, calendar: calendar, awake: awake).isEmpty,
+            "止めているあいだの予定は記録なしにしない")
+        check(paused.skipsFire(now: now, calendar: calendar), "止めたジョブは、外す前に起こされても動かさない")
+        check(paused.unloadsAfterRun(now: now, calendar: calendar), "動いている最中に止めたら、終わったあとに外す")
+
+        let line = MenuBar.line(paused, nil, stopped: true, now: now, calendar: calendar)
+        check(line.hasSuffix(Strings.paused) && !line.contains(Strings.nextRun("")), "メニューでは次回の代わりに停止中")
+        let lastRun = RunRecord(stamp: "s", start: at(8, 9), end: at(8, 9), exitCode: 0, session: nil, pid: nil)
+        check(
+            MenuBar.line(paused, lastRun, stopped: true, now: now, calendar: calendar) == Strings.paused,
+            "止めているあいだに飛ばした予定には前回を添えない")
+        daily.id = "b"
+        paused.id = "a"
+        check(
+            MenuBar.ordered([paused, daily], stopped: ["a"], now: now, calendar: calendar).map(\.id) == ["b", "a"],
+            "止めたジョブはメニューの後ろに回す")
+
+        // 署名が変わったときの入れ直し
+        check(Reload.reloads(daily, loaded: true, retrying: false, now: now), "入っているジョブは入れ直す")
+        check(!Reload.reloads(paused, loaded: true, retrying: false, now: now), "止めたジョブは入れ直さない")
+        check(!Reload.reloads(daily, loaded: false, retrying: false, now: now), "Owler の外で外されたジョブは入れ直さない")
+        check(Reload.reloads(daily, loaded: false, retrying: true, now: now), "自分で外して入れ損ねたジョブは入れ直す")
+        check(!Reload.reloads(once, loaded: true, retrying: false, now: now), "済んだ1回だけのジョブは入れ直さない")
+
+        // launchctl list
+        let list = Launchctl.parseList("PID\tStatus\tLabel\n-\t0\tio.kkweb.owler.job.a\n123\t0\tio.kkweb.owler.job.b\n")
+        check(list.count == 2 && list["PID"] == nil, "見出しの行は読まない")
+        check(list["io.kkweb.owler.job.a"] != nil && list["io.kkweb.owler.job.a"]! == nil, "動いていないジョブも入っている")
+        check(list["io.kkweb.owler.job.b"]! == 123, "動いているジョブはプロセスの番号を読む")
     }
 
     private static func check(_ condition: Bool, _ name: String) {

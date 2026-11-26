@@ -4,11 +4,15 @@ import Foundation
 enum CLI {
     static let usage = """
         Usage:
-          owler add <id> --folder <dir> --at <HH:MM> [--at <HH:MM>...] [--weekdays <days>]
+          owler add <id> --folder <dir> --at <HH:MM> [--at <HH:MM>...] [--weekdays <days> | --on <YYYY-MM-DD>]
                     [--summary <text>] [--also-log <file>] [--review] [--review-when <text>]
                     -- <command> [args...]
               Register a job and load it into launchd. <id> is lowercase letters, digits and '-'.
               <days> is like 1-5 or 0,6 (0 = Sunday). Omit it to run every day.
+              --on runs the job once, on that date at the one --at time, and must be in the future.
+              After that run Owler unloads it from launchd; the job stays listed as done until you remove it.
+              If the Mac is asleep at that time, launchd runs it when the Mac wakes that same day. If the Mac is
+              off, or wakes on a later day, it does not run by itself; use start.
               Re-running add with the same <id> replaces the job. Times are local time.
               --review marks the menu bar icon with a dot after each successful run, until you open that run.
               Use it for jobs whose results you want to come and read, not for jobs that just need to succeed.
@@ -24,7 +28,10 @@ enum CLI {
               together with what went to StandardErrorPath. EnvironmentVariables are kept. A plist with other
               keys Owler cannot carry over is refused.
           owler remove <id>       Unload a job and delete it.
-          owler start <id>        Run a job now.
+          owler start <id>        Run a job now, even if it is paused or done.
+          owler pause <id>        Stop running a job on schedule until you resume it. A run in progress finishes.
+          owler resume <id>       Put a paused job back on its schedule. Also reloads a job that was unloaded
+                                  from launchd outside Owler.
           owler list              Show jobs and their last run.
           owler open <id>         Open the last run in Claude Code (the app chosen in Settings: Cursor, VS Code or the Claude desktop app).
           owler run <id>          Used by launchd. Runs the job and records it.
@@ -41,7 +48,9 @@ enum CLI {
     static func main(_ args: [String]) -> Int32 {
         guard let command = args.first else { return fail(usage) }
         // 見本の置き場は窓に見せるためだけのもの。launchd の登録は置き場と関係なく本物に入るので、触らせない
-        if Paths.previewSupport != nil, ["add", "import", "remove", "start", "run"].contains(command) {
+        if Paths.previewSupport != nil,
+            ["add", "import", "remove", "start", "run", "pause", "resume"].contains(command)
+        {
             return fail(
                 "OWLER_SUPPORT_DIR is set. It only previews jobs in the window; unset it to change launchd jobs")
         }
@@ -50,7 +59,13 @@ enum CLI {
         case "add": return add(rest)
         case "import": return importJob(rest)
         case "remove": return withID(rest) { JobStore.remove($0) }
-        case "start": return withID(rest) { Launchctl.kickstart(Paths.label($0)) }
+        case "start": return attempt(rest) { try JobStore.runNow($0) }
+        case "pause": return pause(rest)
+        case "resume":
+            return attempt(rest) {
+                try JobStore.resume($0, owler: executable)
+                print("Resumed \($0)")
+            }
         case "list": return list()
         case "open": return open(rest)
         case "run":
@@ -110,7 +125,7 @@ enum CLI {
         guard let o = parse(args), let id = o.positional.first, let folder = o.one("folder"), !o.tail.isEmpty
         else { return fail(usage) }
         if let unknown = o.unknown(allowed: [
-            "folder", "at", "weekdays", "summary", "also-log", "review", "review-when",
+            "folder", "at", "weekdays", "on", "summary", "also-log", "review", "review-when",
         ]) {
             return fail("Unknown option --\(unknown)")
         }
@@ -118,22 +133,21 @@ enum CLI {
             return fail("Cannot find the command \(o.tail[0]). Give its full path")
         }
         guard Job.isValidID(id) else { return fail("Invalid id: \(id)") }
-        let times = (o.values["at"] ?? []).map(ScheduleParser.time)
-        guard !times.isEmpty, !times.contains(where: { $0 == nil }) else { return fail("Give --at as HH:MM") }
-        var weekdays: [Int]?
-        if let text = o.one("weekdays") {
-            guard let days = ScheduleParser.weekdays(text) else { return fail("Invalid --weekdays: \(text)") }
-            weekdays = days
+        let schedule: (slots: [Job.Slot], on: Job.Day?)
+        switch Self.schedule(at: o.values["at"] ?? [], weekdays: o.values["weekdays"], on: o.values["on"]) {
+        case .success(let value): schedule = value
+        case .failure(let rejected): return fail(rejected.message)
         }
         let job = Job(
             id: id,
             summary: o.one("summary") ?? "",
             folder: absolute(folder),
             command: [executable] + o.tail.dropFirst(),
-            schedule: ScheduleParser.slots(times: times.compactMap { $0 }, weekdays: weekdays),
+            schedule: schedule.slots,
             alsoLogTo: o.one("also-log").map(absolute),
             review: o.one("review") == nil ? nil : true,
-            reviewWhen: o.one("review-when"))
+            reviewWhen: o.one("review-when"),
+            on: schedule.on)
         let addsReview = job.review == true && JobStore.load(id)?.review != true
         let status = install(job)
         // あとから --review を付けたジョブは、それまでの回を見たことにする。でないと付けた途端に過去の回すべてに印が付く。
@@ -144,6 +158,42 @@ enum CLI {
             }
         }
         return status
+    }
+
+    struct Rejected: Error {
+        let message: String
+    }
+
+    /// `--at`・`--weekdays`・`--on` から予定を作る。`--on` があれば1回だけのジョブで、時刻は1つだけ、曜日は付けられない。
+    /// 過ぎた日時は断る。launchd には年が無いので、登録すると翌年のその日に動いてしまう
+    static func schedule(
+        at: [String], weekdays: [String]?, on: [String]?, now: Date = Date(), calendar: Calendar = .current
+    ) -> Result<(slots: [Job.Slot], on: Job.Day?), Rejected> {
+        let times = at.map(ScheduleParser.time)
+        guard !times.isEmpty, !times.contains(where: { $0 == nil }) else {
+            return .failure(Rejected(message: "Give --at as HH:MM"))
+        }
+        if let on {
+            guard on.count == 1, let text = on.first, let day = Job.Day(text, calendar: calendar) else {
+                return .failure(Rejected(message: "Give --on once, as YYYY-MM-DD"))
+            }
+            guard times.count == 1 else { return .failure(Rejected(message: "A job with --on takes exactly one --at")) }
+            guard weekdays == nil else { return .failure(Rejected(message: "--weekdays cannot be used with --on")) }
+            let slots = ScheduleParser.slots(times: times.compactMap { $0 }, weekdays: nil)
+            let job = Job(id: "", summary: "", folder: "", command: [], schedule: slots, on: day)
+            guard let fire = job.oneOffFire(calendar: calendar), fire > now else {
+                return .failure(Rejected(message: "\(text) \(at[0]) has already passed"))
+            }
+            return .success((slots, day))
+        }
+        var days: [Int]?
+        if let text = weekdays?.last {
+            guard let parsed = ScheduleParser.weekdays(text) else {
+                return .failure(Rejected(message: "Invalid --weekdays: \(text)"))
+            }
+            days = parsed
+        }
+        return .success((ScheduleParser.slots(times: times.compactMap { $0 }, weekdays: days), nil))
     }
 
     static func importJob(_ args: [String]) -> Int32 {
@@ -215,7 +265,9 @@ enum CLI {
                 }
             // 前の回が未読のまま残っていれば、前回が失敗でも添える
             let new = RunStore.unseen(job).isEmpty ? "" : " (new)"
-            print("\(job.id)\t\(job.scheduleText)\t\(state)\(new)\t\(job.summary)")
+            let status =
+                job.isDone() ? " (done)" : job.isStopped(loaded: Launchctl.isLoaded(Paths.label(job.id))) ? " (paused)" : ""
+            print("\(job.id)\t\(job.scheduleText)\(status)\t\(state)\(new)\t\(job.summary)")
         }
         return 0
     }
@@ -251,6 +303,29 @@ enum CLI {
         guard let id = args.first, JobStore.load(id) != nil else { return fail("No such job: \(args.first ?? "")") }
         action(id)
         return 0
+    }
+
+    static func attempt(_ args: [String], _ action: (String) throws -> Void) -> Int32 {
+        guard let id = args.first, JobStore.load(id) != nil else { return fail("No such job: \(args.first ?? "")") }
+        do {
+            try action(id)
+        } catch {
+            return fail("\(error)")
+        }
+        return 0
+    }
+
+    static func pause(_ args: [String]) -> Int32 {
+        guard let id = args.first, let job = JobStore.load(id) else { return fail("No such job: \(args.first ?? "")") }
+        // 済んだ1回だけのジョブはもう起こされないので、止めるものが無い
+        if job.isDone() { return fail("\(id) has already passed its date") }
+        return attempt(args) {
+            if try JobStore.pause($0) {
+                print("Paused \($0)")
+            } else {
+                print("Paused \($0). It is running now; it is unloaded from launchd when this run ends")
+            }
+        }
     }
 
     /// コマンドの名前を、実行ファイルの絶対パスにする。launchd は PATH を絞って動かすので、

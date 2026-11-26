@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.20]
+
+- Jobs that run once: `owler add <id> --on 2026-11-27 --at 12:00`. After the run, Owler takes the job out of launchd and lists it under "Done" at the bottom of the window, where its runs stay readable until you remove it. The menu bar leaves it out unless a run is unread, failed or missed. If the Mac was asleep or off and the time passed more than 10 minutes ago, the job does not run late by itself; it shows "No record" and you decide with Run Now
+- Pause and Resume: a button on a job's page (and the list's right-click menu), and `owler pause` / `owler resume`. A paused job is greyed out in the window and the menu bar with "Paused" in place of its next run, and its scheduled times do not count as "No record". A job taken out of launchd outside Owler is shown as paused too, and Resume loads it again
+
 ## [0.1.19]
 
 - Settings has a new "Open Claude Code In" row. Open in Claude Code, New Job and `owler open` can now open the conversation in the Claude desktop app's Code tab instead of Cursor or VS Code. Only the apps that are installed are listed, and Cursor stays the default

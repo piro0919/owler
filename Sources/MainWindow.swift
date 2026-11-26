@@ -13,6 +13,10 @@ final class Model: ObservableObject {
     @Published var missed: [Date] = []
     /// 最後の回より後に、記録の無い予定があるジョブ。一覧の丸を白抜きにする
     @Published var missedJobs: Set<String> = []
+    /// 止めたジョブと、Owler の外で launchd から外されたジョブ。灰色にし、次回の代わりに「停止中」と出す
+    @Published var stopped: Set<String> = []
+    /// 時刻を過ぎた1回だけのジョブ。一覧では「済み」の見出しの下にまとめる
+    @Published var done: Set<String> = []
     /// 切り替えたらその場で読み直す。3秒ごとの読み直しを待つと、前のジョブの一覧が残って見える
     @Published var selectedJob: String? {
         didSet {
@@ -66,6 +70,11 @@ final class Model: ObservableObject {
         let missed = Set(
             jobs.filter { !RunStore.missed($0, runs: last[$0.id].map { [$0] } ?? [], limit: 1).isEmpty }.map(\.id))
         if missed != missedJobs { missedJobs = missed }
+        // launchd に入っているかは LoadedJobs が10秒ごとに `launchctl list` を1回読んで覚えている
+        let stopped = Set(jobs.filter { $0.isStopped(loaded: LoadedJobs.shared.isLoaded($0.id)) }.map(\.id))
+        if stopped != self.stopped { self.stopped = stopped }
+        let done = Set(jobs.filter { $0.isDone() }.map(\.id))
+        if done != self.done { self.done = done }
         loadRuns()
     }
 
@@ -119,10 +128,40 @@ final class Model: ObservableObject {
         if let run = adjacentRun(offset) { openedRunID = run.id }
     }
 
+    /// 止めたジョブや済んだ1回だけのジョブも動かす（JobStore.runNow が launchd に入れてから起こす）。
+    /// launchctl を何度か呼ぶので、窓を止めないよう裏で行う
     func runNow(_ id: String) {
-        Launchctl.kickstart(Paths.label(id))
-        // 記録は Owler run が書く。少し待ってから読み直す
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.reload() }
+        background(failure: Strings.runNowFailed) { try JobStore.runNow(id) }
+    }
+
+    /// 止める・再開する。止めると定義に印を書いて launchd から外し、再開で入れ直す
+    func togglePause(_ id: String) {
+        if stopped.contains(id) {
+            let owler = CLI.executable
+            background(failure: Strings.resumeFailed) { try JobStore.resume(id, owler: owler) }
+        } else {
+            background(failure: Strings.pauseFailed) { try JobStore.pause(id) }
+        }
+    }
+
+    private func background(failure title: String, _ action: @escaping @Sendable () throws -> Void) {
+        Task.detached {
+            var failure: String?
+            do { try action() } catch { failure = "\(error)" }
+            await MainActor.run {
+                if let failure {
+                    let alert = NSAlert()
+                    alert.messageText = title
+                    alert.informativeText = failure
+                    alert.runModal()
+                }
+                LoadedJobs.shared.invalidate()
+                self.reload()
+            }
+            // 記録は Owler run が書き、launchd の状態は LoadedJobs が裏で読み直す。少し待ってからもう一度読む
+            try? await Task.sleep(for: .seconds(1))
+            await MainActor.run { self.reload() }
+        }
     }
 
     func openInEditor() {
@@ -146,16 +185,14 @@ struct MainView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(model.jobs, selection: $model.selectedJob) { job in
-                HStack(spacing: 10) {
-                    StateDot(state: model.lastRuns[job.id]?.state, missed: model.missedJobs.contains(job.id))
-                    Text(job.displayName).lineLimit(1)
-                        .fontWeight(model.unseenJobs.contains(job.id) ? .bold : nil)
-                }
-                .padding(.vertical, 4)
-                .padding(.leading, 6)
-                .contextMenu {
-                    Button(Strings.runNow) { model.runNow(job.id) }
+            // 済んだ1回だけのジョブは、ほかのジョブの下に「済み」の見出しでまとめる。消すのは利用者
+            List(selection: $model.selectedJob) {
+                ForEach(model.jobs.filter { !model.done.contains($0.id) }) { row($0) }
+                let finished = model.jobs.filter { model.done.contains($0.id) }
+                if !finished.isEmpty {
+                    Section(Strings.done) {
+                        ForEach(finished) { row($0) }
+                    }
                 }
             }
             .navigationSplitViewColumnWidth(min: 280, ideal: 290, max: 360)
@@ -216,6 +253,28 @@ struct MainView: View {
         }
         .frame(minWidth: 860, minHeight: 520)
     }
+
+    /// 一覧の1行。止めたジョブと済んだジョブは灰色にする
+    private func row(_ job: Job) -> some View {
+        let done = model.done.contains(job.id)
+        let stopped = model.stopped.contains(job.id)
+        return HStack(spacing: 10) {
+            StateDot(state: model.lastRuns[job.id]?.state, missed: model.missedJobs.contains(job.id))
+                .opacity(done || stopped ? 0.5 : 1)
+            Text(job.displayName).lineLimit(1)
+                .fontWeight(model.unseenJobs.contains(job.id) ? .bold : nil)
+                .foregroundStyle(done || stopped ? .secondary : .primary)
+        }
+        .padding(.vertical, 4)
+        .padding(.leading, 6)
+        .contextMenu {
+            Button(Strings.runNow) { model.runNow(job.id) }
+            if !done {
+                Button(stopped ? Strings.resume : Strings.pause) { model.togglePause(job.id) }
+            }
+        }
+        .tag(job.id as String?)
+    }
 }
 
 /// ジョブのページ。手本は Vercel のデプロイ一覧。見出しと、枠に入った実行の表だけを置く
@@ -227,7 +286,15 @@ struct JobPage: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 Header(title: job.displayName, details: details) {
-                    OpenButton(model: model)
+                    HStack(spacing: 8) {
+                        // 済んだ1回だけのジョブはもう起こされないので、止めるものが無い
+                        if !model.done.contains(job.id) {
+                            let stopped = model.stopped.contains(job.id)
+                            Button(stopped ? Strings.resume : Strings.pause) { model.togglePause(job.id) }
+                                .controlSize(.large)
+                        }
+                        OpenButton(model: model)
+                    }
                 }
                 Card {
                     if rows.isEmpty {
@@ -282,10 +349,17 @@ struct JobPage: View {
     /// ごちゃついて見えると言われた（2026-10-14）。項目名を左に揃え、1項目1行にした
     private var details: [(String, String)] {
         var rows = [(Strings.scheduleLabel, job.scheduleText)]
-        if let next = job.nextFire() { rows.append((Strings.nextLabel, Format.dateTime(next))) }
-        // 記録は100回で消えるので、頻繁なジョブでは月の合計を数えられない。1回の平均と予定の回数から見込む
+        if model.stopped.contains(job.id) {
+            rows.append((Strings.nextLabel, Strings.paused))
+        } else if job.on == nil, let next = job.nextFire() {
+            // 1回だけのジョブは予定の行に日時があるので、次回は重ねない
+            rows.append((Strings.nextLabel, Format.dateTime(next)))
+        }
+        // 記録は100回で消えるので、頻繁なジョブでは月の合計を数えられない。1回の平均と予定の回数から見込む。
+        // 1回だけのジョブは繰り返さないので、月の見込みは出さない
         if let cost = model.costEstimate(job: job) {
-            rows.append((Strings.costLabel, Strings.costPerRun(cost.perRun, month: cost.month)))
+            rows.append(
+                (Strings.costLabel, job.on == nil ? Strings.costPerRun(cost.perRun, month: cost.month) : Strings.cost(cost.perRun)))
         }
         rows.append((Strings.unseenLabel, Strings.reviewCondition(job)))
         return rows

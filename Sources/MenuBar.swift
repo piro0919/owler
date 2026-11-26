@@ -72,16 +72,33 @@ final class MenuBar: NSObject, NSMenuDelegate {
         var run: RunRecord?
         var unseen: Bool
         var missed: Bool
+        /// 止めたジョブか、Owler の外で launchd から外されたジョブ
+        var stopped: Bool
     }
 
-    /// メニューの並び（次に動く順）で返す
+    /// メニューの並び（次に動く順）で返す。済んだ1回だけのジョブは、まだ見ていない回・開いていない失敗・
+    /// 記録なしがあるときと、動いているあいだだけ出す。済んだあとも並べ続けると、消すまでメニューが伸びる
     private func lastRuns() -> [Entry] {
-        Self.ordered(JobStore.all()).map { job in
+        let jobs = JobStore.all()
+        let stopped = Set(jobs.filter { $0.isStopped(loaded: LoadedJobs.shared.isLoaded($0.id)) }.map(\.id))
+        return Self.ordered(jobs, stopped: stopped).compactMap { job in
             let run = RunStore.all(job.id, limit: 1).first
-            return Entry(
+            let entry = Entry(
                 job: job, run: run, unseen: !RunStore.unseen(job).isEmpty,
-                missed: !RunStore.missed(job, runs: run.map { [$0] } ?? [], limit: 1).isEmpty)
+                missed: !RunStore.missed(job, runs: run.map { [$0] } ?? [], limit: 1).isEmpty,
+                stopped: stopped.contains(job.id))
+            return Self.shows(job, run, unseen: entry.unseen, missed: entry.missed) ? entry : nil
         }
+    }
+
+    /// メニューに出すか。済んだ1回だけのジョブは、気にかけることが残っているときだけ
+    nonisolated static func shows(
+        _ job: Job, _ run: RunRecord?, unseen: Bool, missed: Bool, now: Date = Date(), calendar: Calendar = .current
+    )
+        -> Bool
+    {
+        guard job.isDone(now: now, calendar: calendar) else { return true }
+        return unseen || missed || job.awaitsAcknowledgement(run) || run?.state == .running
     }
 
     private func refresh() {
@@ -179,11 +196,17 @@ final class MenuBar: NSObject, NSMenuDelegate {
         item.image = Self.dot(entry.run?.state, missed: entry.missed)
         item.toolTip = job.summary.isEmpty ? nil : job.summary
         // 2行目に次回を出す。subtitle の無い版では1行に並べる
-        let line = Self.line(job, entry.run, missed: entry.missed)
+        let line = Self.line(job, entry.run, missed: entry.missed, stopped: entry.stopped)
         if #available(macOS 14.4, *) {
             item.subtitle = line
         } else {
             item.title = "\(job.displayName)  —  \(line)"
+        }
+        // 止めたジョブは灰色にする。押せば窓で開き、そこで再開できるので、押せなくはしない
+        if entry.stopped {
+            item.attributedTitle = NSAttributedString(
+                string: item.title, attributes: [.foregroundColor: NSColor.secondaryLabelColor])
+            item.image = Self.dot(entry.run?.state, missed: entry.missed, dimmed: true)
         }
         return item
     }
@@ -191,8 +214,14 @@ final class MenuBar: NSObject, NSMenuDelegate {
     /// メニューの並び。次に動く順。2行目に次回を出すので、上から時刻が並ぶ。
     /// ID の順だった頃は、画面に出るのが日本語の説明なので規則が見えず、ランダムに見えると言われた（2026-10-14）。
     /// 窓の一覧は選んだ行が時刻のたびに動くと使いにくいので、ID の順のまま
-    nonisolated static func ordered(_ jobs: [Job], now: Date = Date(), calendar: Calendar = .current) -> [Job] {
-        let next = Dictionary(uniqueKeysWithValues: jobs.map { ($0.id, $0.nextFire(after: now, calendar: calendar)) })
+    /// 止めたジョブ（`stopped`）は次に動かないので、次回の無いジョブと同じく後ろに回す
+    nonisolated static func ordered(
+        _ jobs: [Job], stopped: Set<String> = [], now: Date = Date(), calendar: Calendar = .current
+    ) -> [Job] {
+        let next = Dictionary(
+            uniqueKeysWithValues: jobs.map {
+                ($0.id, stopped.contains($0.id) ? nil : $0.nextFire(after: now, calendar: calendar))
+            })
         return jobs.sorted {
             switch (next[$0.id] ?? nil, next[$1.id] ?? nil) {
             case (let a?, let b?) where a != b: a < b
@@ -206,8 +235,11 @@ final class MenuBar: NSObject, NSMenuDelegate {
     /// 各ジョブの2行目。前回の成功は丸の色で分かるので書かず、失敗・中断・実行中だけを言葉で添える。
     /// ただし直前の予定の回が記録に無いときは、成功でも前回の日時を出す。スリープで飛ばした回などに気付けるように。
     /// 起きていたのに記録の無い予定が前回より後にあれば（`missed`）、失敗と同じく「記録なし」と添える
+    /// 止めたジョブ（`stopped`）は次回の代わりに「停止中」と出す。止めているあいだに飛ばした予定は気付かせる
+    /// ものではないので、前回の日時も添えない。済んだ1回だけのジョブは次回が無いので「済み」と添える
     nonisolated static func line(
-        _ job: Job, _ run: RunRecord?, missed: Bool = false, now: Date = Date(), calendar: Calendar = .current
+        _ job: Job, _ run: RunRecord?, missed: Bool = false, stopped: Bool = false, now: Date = Date(),
+        calendar: Calendar = .current
     ) -> String {
         var parts: [String] = []
         if missed {
@@ -215,7 +247,7 @@ final class MenuBar: NSObject, NSMenuDelegate {
         } else if let run {
             if run.state != .succeeded {
                 parts.append(Strings.stateText(run))
-            } else if let previous = job.previousFire(before: now, calendar: calendar),
+            } else if !stopped, let previous = job.previousFire(before: now, calendar: calendar),
                 run.start < previous.addingTimeInterval(-60)
             {
                 parts.append(Strings.lastRun(Format.near(run.start, now: now, calendar: calendar)))
@@ -223,8 +255,12 @@ final class MenuBar: NSObject, NSMenuDelegate {
         } else {
             parts.append(Strings.noRuns)
         }
-        if let next = job.nextFire(after: now, calendar: calendar) {
+        if stopped {
+            parts.append(Strings.paused)
+        } else if let next = job.nextFire(after: now, calendar: calendar) {
             parts.append(Strings.nextRun(Format.near(next, now: now, calendar: calendar)))
+        } else if job.isDone(now: now, calendar: calendar) {
+            parts.append(Strings.done)
         }
         return parts.joined(separator: " · ")
     }
@@ -247,9 +283,12 @@ final class MenuBar: NSObject, NSMenuDelegate {
     }()
 
     /// 状態の丸。窓の一覧と同じ色。記録の無い予定があれば灰の白抜き
-    static func dot(_ state: RunRecord.State?, missed: Bool = false) -> NSImage {
+    /// `dimmed` は止めたジョブ。色を半分に薄める
+    static func dot(_ state: RunRecord.State?, missed: Bool = false, dimmed: Bool = false) -> NSImage {
+        let alpha: CGFloat = dimmed ? 0.5 : 1
         if missed {
             return NSImage(size: NSSize(width: 10, height: 10), flipped: false) { rect in
+                NSGraphicsContext.current?.cgContext.setAlpha(alpha)
                 NSColor.systemGray.setStroke()
                 let path = NSBezierPath(ovalIn: rect.insetBy(dx: 1.75, dy: 1.75))
                 path.lineWidth = 1.5
@@ -266,6 +305,8 @@ final class MenuBar: NSObject, NSMenuDelegate {
             case nil: .tertiaryLabelColor
             }
         return NSImage(size: NSSize(width: 10, height: 10), flipped: false) { rect in
+            // 色そのものの透明度（tertiaryLabelColor など）に掛ける
+            NSGraphicsContext.current?.cgContext.setAlpha(alpha)
             color.setFill()
             NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1)).fill()
             return true

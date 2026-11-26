@@ -22,12 +22,105 @@ struct Job: Codable, Identifiable, Equatable {
     /// ジョブが `OWLER_REVIEW_FILE` に書いて未読にするのは、どんなときか。Owler には中身が分からないので、
     /// 足すときに一文で書いてもらい、窓に出す。「返信の下書きを作ったとき」など
     var reviewWhen: String?
+    /// 1回だけ動かすジョブの日。時刻は schedule の1枠。launchd の StartCalendarInterval には年が無いので、
+    /// 月・日・時・分で登録し、動いたら Owler が launchd から外す。外さないと翌年の同じ日にまた動く
+    var on: Day?
+    /// 利用者が止めたジョブ。launchd からは外し、plist は残す。再開で入れ直す。再開の日は持たない
+    var paused: Bool?
 
     /// 動かす時刻。曜日が無ければ毎日。曜日は launchd と同じく 0 と 7 が日曜
     struct Slot: Codable, Equatable, Hashable {
         var hour: Int
         var minute: Int
         var weekday: Int?
+    }
+
+    /// 年月日。定義には「2026-11-27」の形で書く
+    struct Day: Codable, Equatable, Hashable {
+        var year: Int
+        var month: Int
+        var day: Int
+
+        init(year: Int, month: Int, day: Int) {
+            self.year = year
+            self.month = month
+            self.day = day
+        }
+
+        /// `2026-11-27` を読む。2月30日のような無い日は読まない
+        init?(_ text: String, calendar: Calendar = .current) {
+            let parts = text.split(separator: "-", omittingEmptySubsequences: false).map { Int($0) }
+            guard parts.count == 3, let y = parts[0], let m = parts[1], let d = parts[2] else { return nil }
+            let date = calendar.date(from: DateComponents(year: y, month: m, day: d))
+            guard let date, calendar.dateComponents([.year, .month, .day], from: date)
+                == DateComponents(year: y, month: m, day: d)
+            else { return nil }
+            self.init(year: y, month: m, day: d)
+        }
+
+        var text: String { String(format: "%04d-%02d-%02d", year, month, day) }
+
+        init(from decoder: Decoder) throws {
+            let text = try decoder.singleValueContainer().decode(String.self)
+            guard let day = Day(text, calendar: Calendar(identifier: .gregorian)) else {
+                throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: text))
+            }
+            self = day
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            try container.encode(text)
+        }
+    }
+
+    /// 1回だけのジョブが動く日時。繰り返すジョブは nil
+    func oneOffFire(calendar: Calendar = .current) -> Date? {
+        guard let on, let slot = schedule.first else { return nil }
+        return calendar.date(
+            from: DateComponents(year: on.year, month: on.month, day: on.day, hour: slot.hour, minute: slot.minute))
+    }
+
+    /// 1回だけのジョブで、その時刻を過ぎたもの。動いたか、記録なしかは問わない。消すのは利用者
+    func isDone(now: Date = Date(), calendar: Calendar = .current) -> Bool {
+        oneOffFire(calendar: calendar).map { $0 <= now } ?? false
+    }
+
+    /// 止まっているジョブ。止めたもの（paused）と、Owler の外の理由で launchd に入っていないもの
+    /// （plist の Disabled や、手で bootout したもの）を同じに扱う。`loaded` が分からなければ（nil）入っているとみなす。
+    /// 済んだ1回だけのジョブは、動いたあとに外すので、入っていなくても止まっているとはしない
+    func isStopped(loaded: Bool?, now: Date = Date(), calendar: Calendar = .current) -> Bool {
+        !isDone(now: now, calendar: calendar) && (paused == true || loaded == false)
+    }
+
+    /// 1回だけのジョブを、遅れて起こされても動かす幅。missedFires が動いたとみなす幅（10分後まで）と揃える。
+    /// これより遅れた回（眠っていて過ぎ、起きたときに launchd が起こした回）は動かさず、「記録なし」にして
+    /// 人が今すぐ実行で決める（2026-11-26、遅れて動かしてよいかは仕事によるので勝手に動かさないと決めた）
+    static let oneOffLateness: TimeInterval = 600
+
+    /// launchd に起こされたのに、動かさない回か。止めたジョブ（外す前に時刻が来た）と、1回だけのジョブが
+    /// 時刻の1分前から10分後まで以外に起こされたとき（眠っていて過ぎた回と、年が無いので翌年の同じ日に
+    /// 起こされた回）。手で動かした回は除く
+    func skipsFire(now: Date = Date(), calendar: Calendar = .current) -> Bool {
+        if paused == true { return true }
+        guard on != nil else { return false }
+        guard let fire = oneOffFire(calendar: calendar) else { return true }
+        return !(-60...Self.oneOffLateness).contains(now.timeIntervalSince(fire))
+    }
+
+    /// 回のあとに launchd から外すか。止めたジョブ（動いている最中に止めた）と、済んだ1回だけのジョブ
+    func unloadsAfterRun(now: Date = Date(), calendar: Calendar = .current) -> Bool {
+        paused == true || isDone(now: now, calendar: calendar)
+    }
+
+    /// 窓を開いたときの念のための片付けで外すか。済んだ1回だけのジョブが、まだ launchd に入っていて動いていないとき。
+    /// 遅れても動かす幅（oneOffLateness）を過ぎたか、時刻のあとに始まって終わった回があれば外す。
+    /// 幅の中はまだ外さない（launchd が起こすのと競らない）
+    func leftLoaded(lastRun: RunRecord?, now: Date = Date(), calendar: Calendar = .current) -> Bool {
+        guard let fire = oneOffFire(calendar: calendar), fire <= now, lastRun?.state != .running else { return false }
+        let late = now.timeIntervalSince(fire) > Self.oneOffLateness
+        let ran = lastRun.map { $0.settled && $0.start >= fire.addingTimeInterval(-60) } ?? false
+        return late || ran
     }
 
     /// まだ見に来ていない回か。`--review` のジョブの回と、ジョブが自分で見に来てほしいと伝えた回（RunRecord.asked）。
@@ -57,9 +150,10 @@ struct Job: Codable, Identifiable, Equatable {
         return (awaitsReview(run) || awaitsAcknowledgement(run) ? [run] : []) + older
     }
 
-    /// 30日に動く回数の見込み。曜日の決まった時刻は週に1回
+    /// 30日に動く回数の見込み。曜日の決まった時刻は週に1回。1回だけのジョブは繰り返さないので 0
     var runsPerMonth: Double {
-        schedule.reduce(0) { $0 + ($1.weekday == nil ? 30 : 30.0 / 7) }
+        if on != nil { return 0 }
+        return schedule.reduce(0) { $0 + ($1.weekday == nil ? 30 : 30.0 / 7) }
     }
 
     struct CostEstimate: Equatable {
@@ -91,6 +185,11 @@ struct Job: Codable, Identifiable, Equatable {
         for slot in schedule {
             var entry = ["Hour": slot.hour, "Minute": slot.minute]
             if let weekday = slot.weekday { entry["Weekday"] = weekday }
+            // 年は書けない。動いたあとに Owler が外す（unloadsAfterRun）
+            if let on {
+                entry["Month"] = on.month
+                entry["Day"] = on.day
+            }
             intervals.append(entry)
         }
         return [
@@ -119,6 +218,9 @@ struct Job: Codable, Identifiable, Equatable {
         runs: [RunRecord], since: Date, now: Date = Date(), calendar: Calendar = .current,
         awake: (Date) -> Bool?
     ) -> [Date] {
+        // 止めているあいだの予定は動かないのが正しいので数えない。再開すると定義を書き直すので、
+        // 止めていたあいだの時刻は `since`（定義を書いた時刻）より前になり、再開のあとも数えない
+        if paused == true { return [] }
         var missed: [Date] = []
         // 始まったばかりの回は記録を書く途中かもしれないので、2分待ってから数える
         var cursor = now.addingTimeInterval(-120)
@@ -135,7 +237,12 @@ struct Job: Codable, Identifiable, Equatable {
     }
 
     private func fires(from date: Date, direction: Calendar.SearchDirection, calendar: Calendar) -> [Date] {
-        schedule.compactMap { slot -> Date? in
+        // 1回だけのジョブは、その日時だけ。launchd は翌年も起こすが、Owler run が動かさない
+        if on != nil {
+            guard let fire = oneOffFire(calendar: calendar) else { return [] }
+            return (direction == .forward ? fire > date : fire < date) ? [fire] : []
+        }
+        return schedule.compactMap { slot -> Date? in
             var parts = DateComponents()
             parts.hour = slot.hour
             parts.minute = slot.minute
@@ -147,7 +254,10 @@ struct Job: Codable, Identifiable, Equatable {
 
     /// いつ動くかの短い説明。時刻と曜日の書き方は地域に従う（アメリカの英語なら 3:33 AM）。
     /// 時刻×曜日の組み合わせが揃っていれば「月・金 9:00」とまとめ、揃っていなければ枠ごとに並べる
-    func scheduleText(locale: Locale = Strings.locale) -> String {
+    func scheduleText(locale: Locale = Strings.locale, now: Date = Date(), calendar: Calendar = .current) -> String {
+        if let fire = oneOffFire(calendar: calendar) {
+            return Format.once(fire, now: now, calendar: calendar, locale: locale)
+        }
         let ja = locale.language.languageCode?.identifier == "ja"
         let slots = Set(schedule.map { Slot(hour: $0.hour, minute: $0.minute, weekday: $0.weekday.map { $0 % 7 }) })
         let minutes = Set(slots.map { $0.hour * 60 + $0.minute }).sorted()
@@ -296,9 +406,72 @@ enum JobStore {
             throw error
         }
         Reload.remember(job.id, program: owler)
+        try save(job)
+    }
+
+    /// 定義だけを書く。launchd には触らない
+    static func save(_ job: Job) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         try encoder.encode(job).write(to: Paths.job(job.id))
+    }
+
+    struct Missing: Error, CustomStringConvertible {
+        let id: String
+        var description: String { "No such job: \(id)" }
+    }
+
+    /// 止める。先に定義に paused を書いてから launchd から外す。plist は残し、再開で入れ直す。
+    /// 動いている回があれば今は外さず、false を返す。bootout は動いているジョブのプロセスに SIGTERM を送って止める
+    /// （2026-11-26 に実測。Reload が動いている回の終わりを待つのも同じ理由）。その回は最後まで動かし、
+    /// 終わったところで Owler run が定義の paused を見て自分で外す（Runner）。
+    /// 先に paused を書くので、外すまでのあいだに時刻が来ても、Owler run は動かさずに外す
+    @discardableResult
+    static func pause(_ id: String) throws -> Bool {
+        guard var job = load(id) else { throw Missing(id: id) }
+        job.paused = true
+        try save(job)
+        if isRunning(id) { return false }
+        Launchctl.bootoutAndWait(Paths.label(id))
+        return true
+    }
+
+    /// 再開する。launchd に入っていなければ、plist を定義から書き直して入れる。Owler の外で Disabled を
+    /// 書かれた plist は入れられない（bootstrap が断る）ので、書き直して消す。`launchctl disable` の印も外す。
+    /// 呼ぶ実行ファイルは今の plist のものを引き継ぐ。手元のビルドで再開しても、ジョブの呼び先を変えない。
+    /// 動いている最中に止めて、まだ外れていない（その回が終わっていない）ときは、入れ直すと回が止まるので印を消すだけ。
+    /// 済んだ1回だけのジョブは入れない。入れると翌年の同じ日に起こされる
+    static func resume(_ id: String, owler fallback: String) throws {
+        guard var job = load(id) else { throw Missing(id: id) }
+        job.paused = nil
+        let label = Paths.label(id)
+        if !job.isDone(), !Launchctl.isLoaded(label) {
+            let owler = Reload.program(id) ?? fallback
+            try FileManager.default.createDirectory(at: Paths.launchAgents, withIntermediateDirectories: true)
+            try write(plistFor: job, owler: owler)
+            Launchctl.enable(label)
+            try Launchctl.bootstrap(Paths.plist(id))
+            Reload.remember(id, program: owler)
+        }
+        try save(job)
+    }
+
+    /// 今すぐ動かす。止めたジョブや済んだ1回だけのジョブは launchd に入っていないので、入れてから起こす。
+    /// 起こした回は、手で動かした印（RunStore.manualRequest）を見て Owler run が動かし、終わったら外し直す
+    static func runNow(_ id: String) throws {
+        let label = Paths.label(id)
+        if !Launchctl.isLoaded(label) { try Launchctl.bootstrap(Paths.plist(id)) }
+        RunStore.requestManual(id)
+        let result = Launchctl.kickstart(label)
+        if result.status != 0 {
+            RunStore.cancelManual(id)
+            throw Launchctl.Failure(description: "launchctl kickstart: \(result.output)")
+        }
+    }
+
+    /// その回がまだ動いているか。launchd が起こした直後（記録を書く前）も含む
+    static func isRunning(_ id: String) -> Bool {
+        Launchctl.isRunning(Paths.label(id)) || RunStore.all(id, limit: 1).first?.state == .running
     }
 
     private static func write(plistFor job: Job, owler: String) throws {
@@ -360,18 +533,30 @@ enum Reload {
 
     /// アプリの起動時に呼ぶ。動いているジョブは入れ直すと止まるので、終わるまで1分おきに待つ。
     /// 入れ損ねたジョブも覚えずに次の巡で試す。1時間で諦め、残りは次に起動したときにやる
+    /// 入れ直すジョブか。止めたジョブと済んだ1回だけのジョブは、launchd に戻すと止めた意味が無くなる（1回だけのジョブは
+    /// 翌年の同じ日に起こされる）。Owler の外で外されたジョブ（loaded が false）も、入れ直すと利用者の操作を覆すので触らない。
+    /// ただし自分で外して入れ損ねたジョブ（retrying）は、外れているのが自分のせいなので入れ直す
+    static func reloads(_ job: Job, loaded: Bool, retrying: Bool, now: Date = Date()) -> Bool {
+        job.paused != true && !job.isDone(now: now) && (loaded || retrying)
+    }
+
     static func ifUpdated() {
         Thread.detachNewThread {
+            // 外したあと入れ損ねたジョブ。次の巡で、launchd に入っていなくても入れ直す
+            var retrying: Set<String> = []
             for _ in 0..<60 {
                 var waiting = false
-                // 巡ごとに読み直す。待っているあいだに消されたジョブを入れ直さない
+                // 巡ごとに読み直す。待っているあいだに消されたジョブ・止めたジョブを入れ直さない
                 for job in JobStore.all() {
                     guard let program = program(job.id),
-                        needed(loaded: loaded[job.id], current: codeHash(at: program))
-                    else { continue }
-                    if Launchctl.isRunning(Paths.label(job.id))
-                        || RunStore.all(job.id, limit: 1).first?.state == .running
-                    {
+                        needed(loaded: loaded[job.id], current: codeHash(at: program)),
+                        reloads(
+                            job, loaded: Launchctl.isLoaded(Paths.label(job.id)), retrying: retrying.contains(job.id))
+                    else {
+                        retrying.remove(job.id)
+                        continue
+                    }
+                    if JobStore.isRunning(job.id) {
                         waiting = true
                         continue
                     }
@@ -379,7 +564,9 @@ enum Reload {
                     do {
                         try Launchctl.bootstrap(Paths.plist(job.id))
                         remember(job.id, program: program)
+                        retrying.remove(job.id)
                     } catch {
+                        retrying.insert(job.id)
                         waiting = true
                     }
                 }
@@ -437,6 +624,88 @@ enum Launchctl {
 
     static func bootout(_ label: String) { call(["bootout", "\(domain)/\(label)"]) }
 
-    /// 時刻を待たずに今すぐ動かす
-    static func kickstart(_ label: String) { call(["kickstart", "\(domain)/\(label)"]) }
+    /// 時刻を待たずに今すぐ動かす。launchd に入っていなければ断られる
+    @discardableResult
+    static func kickstart(_ label: String) -> (status: Int32, output: String) {
+        call(["kickstart", "\(domain)/\(label)"])
+    }
+
+    /// `launchctl disable` の印を外す。印があると、plist を直しても bootstrap が断る
+    static func enable(_ label: String) { call(["enable", "\(domain)/\(label)"]) }
+
+    /// 入っているジョブのラベルと、動いていればそのプロセスの番号。`launchctl list` を1回だけ呼ぶ。
+    /// ジョブごとに `print` を呼ぶと、3秒ごとの読み直しのたびにジョブの数だけ launchctl を起こすことになる
+    static func list() -> [String: Int32?]? {
+        let result = call(["list"])
+        return result.status == 0 ? parseList(result.output) : nil
+    }
+
+    /// `PID\tStatus\tLabel` の行を読む。動いていなければ PID は `-`
+    static func parseList(_ output: String) -> [String: Int32?] {
+        var jobs: [String: Int32?] = [:]
+        for line in output.split(separator: "\n").dropFirst() {
+            let columns = line.split(separator: "\t", omittingEmptySubsequences: false)
+            guard columns.count >= 3 else { continue }
+            // 添字で nil を入れると鍵ごと消えるので updateValue で入れる
+            jobs.updateValue(Int32(columns[0]), forKey: String(columns[2]))
+        }
+        return jobs
+    }
+}
+
+/// launchd に入っているジョブ。窓とメニューバーが3秒ごとに読み直すたびに launchctl を起こさないよう、
+/// `launchctl list` を1回だけ呼び、10秒は覚えておく。読むのは裏で行い、まだ読めていなければ分からない（nil）
+@MainActor
+final class LoadedJobs {
+    static let shared = LoadedJobs()
+
+    /// ラベルと、動いていればそのプロセスの番号
+    private var labels: [String: Int32?]?
+    private var fetchedAt: Date?
+    private var fetching = false
+    /// 読んでいる最中に古くなった。読み終えても覚えずに、次に聞かれたときに読み直す
+    private var staleWhileFetching = false
+
+    /// 入っているか。分からなければ nil
+    func isLoaded(_ id: String) -> Bool? {
+        refreshIfStale()
+        return labels.map { $0[Paths.label(id)] != nil }
+    }
+
+    /// 止める・再開する・今すぐ実行したあとに呼ぶ。次に聞かれたときに読み直す
+    func invalidate() {
+        fetchedAt = nil
+        if fetching { staleWhileFetching = true }
+        refreshIfStale()
+    }
+
+    private func refreshIfStale() {
+        guard !fetching, (fetchedAt.map { Date().timeIntervalSince($0) > 10 }) ?? true else { return }
+        fetching = true
+        Task.detached {
+            let now = Date()
+            let labels = Launchctl.list()
+            if let labels { Self.unloadFinishedOneOffs(labels, now: now) }
+            await MainActor.run {
+                // 読めなかったときは前の値を残す
+                if let labels { self.labels = labels }
+                self.fetchedAt = self.staleWhileFetching ? nil : now
+                self.staleWhileFetching = false
+                self.fetching = false
+            }
+        }
+    }
+
+    /// 念のための片付け。済んだ1回だけのジョブがまだ入っていれば外す。ふつうは動いた回の Owler run が外すが、
+    /// 外す前に止められた・記録なしで過ぎた、といったときに残る。残すと翌年の同じ日に起こされる
+    /// （そのときも Owler run は動かさないが、外しておく）
+    nonisolated private static func unloadFinishedOneOffs(_ labels: [String: Int32?], now: Date) {
+        for job in JobStore.all() where job.on != nil {
+            let label = Paths.label(job.id)
+            guard let pid = labels[label], pid == nil,
+                job.leftLoaded(lastRun: RunStore.all(job.id, limit: 1).first, now: now)
+            else { continue }
+            Launchctl.bootout(label)
+        }
+    }
 }

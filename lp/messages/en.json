@@ -40,7 +40,7 @@
       },
       {
         "title": "Set up with AI",
-        "body": "Tell Claude Code what to run and when, and it registers the job."
+        "body": "Tell Claude Code what to run and when, and it registers the job. A job can also run just once at a set date and time, and you can pause one and resume it later."
       },
       {
         "title": "Menu bar",

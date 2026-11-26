@@ -59,8 +59,20 @@ registers the job with Owler's command line:
 ```
 
 Run `Owler help` for the rest: `import` takes over a launchd job you already
-have, `remove`, `start` (run now), `list`, and `open` (open the last run in
-Claude Code).
+have, `remove`, `start` (run now), `pause`, `resume`, `list`, and `open` (open
+the last run in Claude Code).
+
+A job can also run just once: `--on 2026-11-27 --at 12:00` instead of a repeating
+schedule. After it runs, Owler takes it out of launchd and lists it under
+**Done**, where its runs stay readable until you remove it. If the Mac was asleep
+or off and the time passed more than 10 minutes ago, it does not run late by
+itself; its page shows "No record" and you decide whether to run it now.
+
+**Pause** on a job's page stops it until you click **Resume**. A paused job is
+greyed out in the window and the menu bar, and its scheduled times do not count
+as "No record". A job taken out of launchd outside Owler (a plist marked
+`Disabled`, or `launchctl bootout`) is shown as paused too, and **Resume** loads
+it again.
 
 Jobs live in `~/Library/Application Support/Owler/`. Each one is a launchd agent
 labelled `io.kkweb.owler.job.<id>` that calls `Owler run <id>`, which records the
