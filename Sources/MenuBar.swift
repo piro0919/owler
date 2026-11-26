@@ -202,10 +202,26 @@ final class MenuBar: NSObject, NSMenuDelegate {
         } else {
             item.title = "\(job.displayName)  —  \(line)"
         }
-        // 止めたジョブは灰色にする。押せば窓で開き、そこで再開できるので、押せなくはしない
+        // 止めたジョブは灰色にする。押せば窓で開き、そこで再開できるので、押せなくはしない。
+        // attributedTitle を付けると subtitle は描かれない（2026-11-26、0.1.20 のメニューで「停止中」が消えていた）ので、
+        // 2行目も同じ文字列に入れる。大きさと色は subtitle に寄せる
         if entry.stopped {
-            item.attributedTitle = NSAttributedString(
-                string: item.title, attributes: [.foregroundColor: NSColor.secondaryLabelColor])
+            let title = NSMutableAttributedString(
+                string: job.displayName,
+                attributes: [.foregroundColor: NSColor.secondaryLabelColor, .font: NSFont.menuFont(ofSize: 0)])
+            if #available(macOS 14.4, *) {
+                title.append(
+                    NSAttributedString(
+                        string: "\n" + line,
+                        attributes: [
+                            .foregroundColor: NSColor.tertiaryLabelColor,
+                            .font: NSFont.menuFont(ofSize: NSFont.smallSystemFontSize),
+                        ]))
+                item.subtitle = nil
+            } else {
+                title.append(NSAttributedString(string: "  —  \(line)"))
+            }
+            item.attributedTitle = title
             item.image = Self.dot(entry.run?.state, missed: entry.missed, dimmed: true)
         }
         return item

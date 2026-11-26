@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.21]
+
+- A paused job in the menu bar shows "Paused" under its name again. In 0.1.20 the greyed-out name hid the second line
+
 ## [0.1.20]
 
 - Jobs that run once: `owler add <id> --on 2026-11-27 --at 12:00`. After the run, Owler takes the job out of launchd and lists it under "Done" at the bottom of the window, where its runs stay readable until you remove it. The menu bar leaves it out unless a run is unread, failed or missed. If the Mac was asleep or off and the time passed more than 10 minutes ago, the job does not run late by itself; it shows "No record" and you decide with Run Now
