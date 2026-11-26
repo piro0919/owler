@@ -457,10 +457,19 @@ enum JobStore {
     }
 
     /// 今すぐ動かす。止めたジョブや済んだ1回だけのジョブは launchd に入っていないので、入れてから起こす。
-    /// 起こした回は、手で動かした印（RunStore.manualRequest）を見て Owler run が動かし、終わったら外し直す
+    /// 起こした回は、手で動かした印（RunStore.manualRequest）を見て Owler run が動かし、終わったら外し直す。
+    /// Owler の外で止められたジョブは、止めた（paused）扱いにしてから入れる。そうしないと回のあとも入ったままで、
+    /// 黙って再開してしまう。plist は定義から書き直す。外で Disabled を書かれた plist は bootstrap が断るため
     static func runNow(_ id: String) throws {
         let label = Paths.label(id)
-        if !Launchctl.isLoaded(label) { try Launchctl.bootstrap(Paths.plist(id)) }
+        if !Launchctl.isLoaded(label), var job = load(id) {
+            if !job.isDone(), job.paused != true {
+                job.paused = true
+                try save(job)
+            }
+            try write(plistFor: job, owler: Reload.program(id) ?? CLI.executable)
+            try Launchctl.bootstrap(Paths.plist(id))
+        }
         RunStore.requestManual(id)
         let result = Launchctl.kickstart(label)
         if result.status != 0 {
