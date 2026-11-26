@@ -1,8 +1,11 @@
 # Changelog
 
-## [0.1.18]
+## [0.1.19]
 
 - Settings has a new "Open Claude Code In" row. Open in Claude Code, New Job and `owler open` can now open the conversation in the Claude desktop app's Code tab instead of Cursor or VS Code. Only the apps that are installed are listed, and Cursor stays the default
+
+## [0.1.18]
+
 - Opening a job in Claude Code no longer waits up to 10 seconds when another app keeps the focus. Owler now passes the conversation on as soon as the job's folder is the editor's front window, whichever app is frontmost.
 
 ## [0.1.17]
